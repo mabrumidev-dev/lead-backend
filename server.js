@@ -32,7 +32,7 @@ app.post('/api/leads/search', async (req, res) => {
   `;
 
   try {
-    const osmRes = await axios.post('https://overpass-api.de/api/interpreter', overpassQuery, {
+    const osmRes = await axios.post('https://z.overpass-api.de/api/interpreter', overpassQuery, {
       headers: {'Content-Type': 'text/plain'}
     });
     const places = osmRes.data.elements;
