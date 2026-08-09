@@ -5,10 +5,9 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 1. BUSCAR ADVOGADOS NO OSM/OVERPASS
+// ROTA PARA BUSCAR ADVOGADOS
 app.post('/api/leads/search', async (req, res) => {
   const { cidade, bairro, ramo } = req.body;
-  // Ex: { "cidade": "Rio de Janeiro", "bairro": "Barra da Tijuca", "ramo": "advogado" }
 
   const overpassQuery = `
     [out:json][timeout:25];
@@ -26,31 +25,15 @@ app.post('/api/leads/search', async (req, res) => {
     const osmRes = await axios.post('https://overpass-api.de/api/interpreter', overpassQuery);
     const places = osmRes.data.elements;
 
-    // 2. ENRIQUECER COM CNPJ.WS
-    const leads = await Promise.all(places.map(async (place) => {
-      const nome = place.tags?.name || 'Sem Nome';
-      let cnpjData = {};
-      
-      try {
-        // CNPJ.ws busca por nome da empresa
-        const cnpjRes = await axios.get(`https://api.cnpj.ws/cnpj/${encodeURIComponent(nome)}`, {
-          timeout: 3000
-        });
-        cnpjData = cnpjRes.data;
-      } catch (e) {
-        // Se não achar no CNPJ.ws, segue só com dados do OSM
-      }
-
+    const leads = places.map((place) => {
       return {
-        nome: nome,
-        endereco: place.tags?.['addr:street'] + ', ' + place.tags?.['addr:city'] || 'Barra da Tijuca',
+        nome: place.tags?.name || 'Sem Nome',
+        endereco: place.tags?.['addr:street'] || `${bairro}, ${cidade}`,
         telefone: place.tags?.phone || place.tags?.['contact:phone'] || null,
-        cnpj: cnpjData.cnpj || null,
-        email: cnpjData.email || null,
         lat: place.lat || place.center?.lat,
         lng: place.lon || place.center?.lon
       }
-    }));
+    });
 
     res.json({ total: leads.length, leads: leads });
 
@@ -59,5 +42,8 @@ app.post('/api/leads/search', async (req, res) => {
   }
 });
 
+app.get('/', (req, res) => {
+  res.send('API de Leads Online! Use POST /api/leads/search');
+});
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
