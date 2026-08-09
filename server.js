@@ -33,7 +33,10 @@ app.post('/api/leads/search', async (req, res) => {
 
   try {
     const osmRes = await axios.post('https://z.overpass-api.de/api/interpreter', overpassQuery, {
-      headers: {'Content-Type': 'text/plain'}
+      headers: {
+        'Content-Type': 'text/plain',
+        'User-Agent': 'LeadBackend/1.0'
+      }
     });
     const places = osmRes.data.elements;
 
