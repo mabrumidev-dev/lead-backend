@@ -5,30 +5,42 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ROTA PARA BUSCAR ADVOGADOS
+// Coordenadas do centro das cidades principais
+const CIDADES_COORD = {
+  "Rio de Janeiro": { lat: -22.9068, lon: -43.1729 },
+  "São Paulo": { lat: -23.5505, lon: -46.6333 },
+  "Belo Horizonte": { lat: -19.9167, lon: -43.9345 }
+}
+
 app.post('/api/leads/search', async (req, res) => {
   const { cidade, bairro, ramo } = req.body;
+  const coords = CIDADES_COORD[cidade];
 
+  if (!coords) {
+    return res.status(400).json({ error: "Cidade não cadastrada. Use: Rio de Janeiro, São Paulo, Belo Horizonte" });
+  }
+
+  // Busca por raio de 5000 metros = 5km
   const overpassQuery = `
     [out:json][timeout:25];
-    area["name"="${cidade}"]->.cidade;
-    area["name"="${bairro}"](area.cidade)->.bairro;
     (
-      node["amenity"="lawyer"](area.bairro);
-      way["amenity"="lawyer"](area.bairro);
-      relation["amenity"="lawyer"](area.bairro);
+      node["amenity"="lawyer"](around:5000,${coords.lat},${coords.lon});
+      way["amenity"="lawyer"](around:5000,${coords.lat},${coords.lon});
+      relation["amenity"="lawyer"](around:5000,${coords.lat},${coords.lon});
     );
     out center;
   `;
 
   try {
-    const osmRes = await axios.post('https://overpass-api.de/api/interpreter', overpassQuery);
+    const osmRes = await axios.post('https://overpass-api.de/api/interpreter', overpassQuery, {
+      headers: {'Content-Type': 'text/plain'}
+    });
     const places = osmRes.data.elements;
 
     const leads = places.map((place) => {
       return {
         nome: place.tags?.name || 'Sem Nome',
-        endereco: place.tags?.['addr:street'] || `${bairro}, ${cidade}`,
+        endereco: place.tags?.['addr:street'] || cidade,
         telefone: place.tags?.phone || place.tags?.['contact:phone'] || null,
         lat: place.lat || place.center?.lat,
         lng: place.lon || place.center?.lon
@@ -40,10 +52,6 @@ app.post('/api/leads/search', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
-
-app.get('/', (req, res) => {
-  res.send('API de Leads Online! Use POST /api/leads/search');
 });
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
