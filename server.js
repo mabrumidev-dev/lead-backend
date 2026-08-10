@@ -6,41 +6,32 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
-
-app.get('/', (req, res) => {
-  res.json({ status: "Backend Online - Com Proxy" });
-});
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 app.get('/search', async (req, res) => {
   try {
-    const { q, city } = req.query;
-    if (!q || !city) return res.status(400).json({ error: "Faltou q ou city" });
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ error: "Faltou q" });
 
-    // OVERPASS PASSANDO PELO PROXY PRA BURLAR BLOQUEIO DO RENDER
-    const overpassQuery = `[out:json][timeout:25];area["name"="${city}"]->.a;(node["amenity"="${q}"]["name"](area.a);way["amenity"="${q}"]["name"](area.a);out center 20;`;
+    // BUSCA POR RAIO DE 10KM NO CENTRO DO RJ - SEMPRE ACHA ALGO
+    const lat = -22.9068;
+    const lon = -43.1729;
+    const overpassQuery = `[out:json][timeout:25];(node["office"="${q}"](around:10000,${lat},${lon});way["office"="${q}"](around:10000,${lat},${lon}););out center 30;`;
+    
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://overpass-api.de/api/interpreter?data=${overpassQuery}`)}`;
-
     const overpassRes = await fetch(proxyUrl);
     const data = await overpassRes.json();
-    const elements = data.elements || [];
 
-    let leads = elements.map(el => ({
+    let leads = (data.elements || []).map(el => ({
       name: el.tags.name || "Sem nome",
-      phone: el.tags.phone || el.tags['contact:phone'] || null,
+      phone: el.tags.phone || null,
       website: el.tags.website || null,
-      address: `${el.tags['addr:street'] || ''} ${el.tags['addr:housenumber'] || ''}, ${city}`,
+      address: el.tags['addr:full'] || 'Rio de Janeiro',
       cnpj: null,
-      source: "Overpass via Proxy"
+      source: "Overpass RJ"
     }));
 
-    if (leads.length > 0) {
-      await supabase.from('leads').insert(leads);
-    }
-
+    if (leads.length > 0) await supabase.from('leads').insert(leads);
     res.json(leads);
 
   } catch (error) {
@@ -48,5 +39,4 @@ app.get('/search', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server rodando na porta ${PORT}`));
+app.listen(process.env.PORT || 10000);
