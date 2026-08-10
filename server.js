@@ -5,11 +5,11 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Coordenadas do centro das cidades principais
 const CIDADES_COORD = {
   "Rio de Janeiro": { lat: -22.9068, lon: -43.1729 },
   "São Paulo": { lat: -23.5505, lon: -46.6333 },
-  "Belo Horizonte": { lat: -19.9167, lon: -43.9345 }
+  "Belo Horizonte": { lat: -19.9167, lon: -43.9345 },
+  "Curitiba": { lat: -25.4296, lon: -49.2713 }
 }
 
 app.post('/api/leads/search', async (req, res) => {
@@ -17,21 +17,17 @@ app.post('/api/leads/search', async (req, res) => {
   const coords = CIDADES_COORD[cidade];
 
   if (!coords) {
-    return res.status(400).json({ error: "Cidade não cadastrada. Use: Rio de Janeiro, São Paulo, Belo Horizonte" });
+    return res.status(400).json({ error: "Cidade não cadastrada" });
   }
 
-  // Busca por raio de 5000 metros = 5km
- const overpassQuery = `
-    [out:json][timeout:25];
+  // Timeout de 30s e limite de 50 resultados
+  const overpassQuery = `
+    [out:json][timeout:30];
     (
-      node["office"="lawyer"](around:10000,${coords.lat},${coords.lon});
-      way["office"="lawyer"](around:10000,${coords.lat},${coords.lon});
-      relation["office"="lawyer"](around:10000,${coords.lat},${coords.lon});
-      node["amenity"="lawyer"](around:10000,${coords.lat},${coords.lon});
-      way["amenity"="lawyer"](around:10000,${coords.lat},${coords.lon});
-      relation["amenity"="lawyer"](around:10000,${coords.lat},${coords.lon});
+      node["office"="lawyer"](around:8000,${coords.lat},${coords.lon});
+      way["office"="lawyer"](around:8000,${coords.lat},${coords.lon});
     );
-    out center;
+    out center 50;
   `;
 
   try {
@@ -39,14 +35,16 @@ app.post('/api/leads/search', async (req, res) => {
       headers: {
         'Content-Type': 'text/plain',
         'User-Agent': 'LeadBackend/1.0'
-      }
+      },
+      timeout: 35000 // 35s pro axios
     });
+    
     const places = osmRes.data.elements;
 
     const leads = places.map((place) => {
       return {
         nome: place.tags?.name || 'Sem Nome',
-        endereco: place.tags?.['addr:street'] || cidade,
+        endereco: place.tags?.['addr:street'] || place.tags?.['addr:city'] || cidade,
         telefone: place.tags?.phone || place.tags?.['contact:phone'] || null,
         lat: place.lat || place.center?.lat,
         lng: place.lon || place.center?.lon
@@ -56,7 +54,8 @@ app.post('/api/leads/search', async (req, res) => {
     res.json({ total: leads.length, leads: leads });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.log(error.message);
+    res.status(500).json({ error: "Erro ao buscar dados. Tente outra cidade." });
   }
 });
 
