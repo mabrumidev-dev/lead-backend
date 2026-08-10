@@ -16,7 +16,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_KEY;
 
-// FUNÇÃO COM DELAY PRA NÃO TOMAR 429
+// FUNÇÃO COM DELAY PRA NÃO TOMAR 429 - SÓ 1 VEZ
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function searchPlaces(query, pageToken = null) {
@@ -92,7 +92,6 @@ app.get('/api/leads', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
