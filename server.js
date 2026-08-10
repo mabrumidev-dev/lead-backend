@@ -21,12 +21,15 @@ app.post('/api/leads/search', async (req, res) => {
   }
 
   // Busca por raio de 5000 metros = 5km
-  const overpassQuery = `
+ const overpassQuery = `
     [out:json][timeout:25];
     (
-      node["amenity"="lawyer"](around:5000,${coords.lat},${coords.lon});
-      way["amenity"="lawyer"](around:5000,${coords.lat},${coords.lon});
-      relation["amenity"="lawyer"](around:5000,${coords.lat},${coords.lon});
+      node["office"="lawyer"](around:10000,${coords.lat},${coords.lon});
+      way["office"="lawyer"](around:10000,${coords.lat},${coords.lon});
+      relation["office"="lawyer"](around:10000,${coords.lat},${coords.lon});
+      node["amenity"="lawyer"](around:10000,${coords.lat},${coords.lon});
+      way["amenity"="lawyer"](around:10000,${coords.lat},${coords.lon});
+      relation["amenity"="lawyer"](around:10000,${coords.lat},${coords.lon});
     );
     out center;
   `;
