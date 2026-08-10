@@ -17,16 +17,14 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_KEY;
 
 // FUNÇÃO COM DELAY PRA NÃO TOMAR 429
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function searchPlaces(query, pageToken = null) {
   let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
   if (pageToken) url += `&pagetoken=${pageToken}`;
   
   const response = await axios.get(url);
-  await sleep(2000); // Espera 2s por causa do pageToken do Google
+  if (pageToken) await sleep(2000); // Espera 2s só se for página 2/3
   return response.data;
 }
 
@@ -51,7 +49,7 @@ app.post('/api/leads/search', async (req, res) => {
         if (data.results) allPlaces = allPlaces.concat(data.results);
         pageToken = data.next_page_token;
         await sleep(1000); // 1s entre cada query
-      } while (pageToken && allPlaces.length < 60); // pega até 3 páginas
+      } while (pageToken && allPlaces.length < 60);
     }
 
     // Remove duplicados pelo place_id
@@ -60,7 +58,7 @@ app.post('/api/leads/search', async (req, res) => {
     // FORMATA PRA SALVAR NO SUPABASE
     const leadsToInsert = uniquePlaces.map(place => ({
       nome: place.name,
-      telefone: null, // Telefone só pega no details, depois a gente faz
+      telefone: null,
       endereco: place.formatted_address,
       cidade: cidade,
       ramo: ramo,
@@ -75,20 +73,24 @@ app.post('/api/leads/search', async (req, res) => {
     res.json({ message: 'Busca concluída e salva no banco', total: leadsToInsert.length });
 
   } catch (error) {
-    console.error(error);
+    console.error(error.response ? error.response.data : error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 // ROTA PRA LER OS LEADS
 app.get('/api/leads', async (req, res) => {
-  const { cidade } = req.query;
-  let query = supabase.from('leads').select('*');
-  if (cidade) query = query.eq('cidade', cidade);
-  
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { cidade } = req.query;
+    let query = supabase.from('leads').select('*');
+    if (cidade) query = query.eq('cidade', cidade);
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 
