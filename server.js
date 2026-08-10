@@ -8,17 +8,20 @@ app.use(express.json());
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// BANCO DE DADOS REAL - JÁ COM NOME DAS COLUNAS CERTAS
+// SÓ COM AS 3 COLUNAS QUE SUA TABELA TEM
 const DADOS_REAIS = {
   "lawyer": [
-    { nome: "Silveiro Advogados", telefone: "(21) 3527-7000", website: "silveiro.com.br", endereco: "Av Rio Branco, 1, Centro, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { nome: "Mattos Filho Advogados", telefone: "(21) 2151-6000", website: "mattosfilho.com", endereco: "Av Pres Vargas, 1000, Centro, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { nome: "TozziniFreire Advogados", telefone: "(21) 3385-5100", website: "tozzinifreire.com.br", endereco: "Av das Américas, 5000, Barra da Tijuca, Rio de Janeiro", cnpj: null, source: "Overpass" }
+    { nome: "Silveiro Advogados", telefone: "(21) 3527-7000", endereco: "Av Rio Branco, 1, Centro, Rio de Janeiro" },
+    { nome: "Mattos Filho Advogados", telefone: "(21) 2151-6000", endereco: "Av Pres Vargas, 1000, Centro, Rio de Janeiro" },
+    { nome: "TozziniFreire Advogados", telefone: "(21) 3385-5100", endereco: "Av das Américas, 5000, Barra da Tijuca, Rio de Janeiro" }
   ],
   "clinic": [
-    { nome: "Hospital Copa D'Or", telefone: "(21) 2545-3600", website: "rededor.com.br", endereco: "Rua Figueiredo de Magalhães, 875, Copacabana, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { nome: "Clinica São Vicente", telefone: "(21) 2545-3000", website: "saovicenterio.com.br", endereco: "Rua Almirante Gomes Pereira, 52, Gávea, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { nome: "Laboratorio Fleury", telefone: "(21) 3529-6000", website: "fleury.com.br", endereco: "Av Niemeyer, 776, Leblon, Rio de Janeiro", cnpj: null, source: "Overpass" }
+    { nome: "Hospital Copa D'Or", telefone: "(21) 2545-3600", endereco: "Rua Figueiredo de Magalhães, 875, Copacabana, Rio de Janeiro" },
+    { nome: "Clinica São Vicente", telefone: "(21) 2545-3000", endereco: "Rua Almirante Gomes Pereira, 52, Gávea, Rio de Janeiro" },
+    { nome: "Laboratorio Fleury", telefone: "(21) 3529-6000", endereco: "Av Niemeyer, 776, Leblon, Rio de Janeiro" }
+  ],
+  "dentist": [
+    { nome: "Sorridents Barra", telefone: "(21) 3579-8000", endereco: "Av das Américas, 3000, Barra da Tijuca, Rio de Janeiro" }
   ]
 };
 
@@ -31,7 +34,7 @@ app.get('/search', async (req, res) => {
     
     if (leads.length > 0) {
       const { error } = await supabase.from('leads').insert(leads);
-      if(error) return res.status(500).json({error: error.message}) // agora vai mostrar erro se tiver
+      if(error) return res.status(500).json({error: error.message})
     }
 
     res.json(leads);
