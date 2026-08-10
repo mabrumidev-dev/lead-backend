@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -13,50 +12,34 @@ const supabase = createClient(
 );
 
 app.get('/', (req, res) => {
-  res.json({ status: "Backend Online FREE" });
+  res.json({ status: "Backend Online - Versao Ultra Free" });
 });
 
+// ROTA QUE RETORNA DADOS MOCK SÓ PRA TESTAR
 app.get('/search', async (req, res) => {
-  try {
-    const { q, city } = req.query;
-    if (!q || !city) return res.status(400).json({ error: "Faltou q ou city" });
-
-    // BUSCA SÓ NO OVERPASS - 100% GRATIS E FUNCIONA NO RENDER FREE
-    const overpassQuery = `
-      [out:json][timeout:25];
-      area["name"="${city}"]->.searchArea;
-      (
-        node["amenity"="${q}"]["name"](area.searchArea);
-        way["amenity"="${q}"]["name"](area.searchArea);
-        node["office"="${q}"]["name"](area.searchArea);
-        way["office"="${q}"]["name"](area.searchArea);
-      );
-      out center 50;
-    `;
-
-    const overpassRes = await axios.post('https://overpass-api.de/api/interpreter', overpassQuery);
-    const elements = overpassRes.data.elements || [];
-
-    let leads = elements.map(el => ({
-      name: el.tags.name || "Sem nome",
-      phone: el.tags.phone || el.tags['contact:phone'] || null,
-      website: el.tags.website || null,
-      address: `${el.tags['addr:street'] || ''} ${el.tags['addr:housenumber'] || ''}, ${city}`,
-      cnpj: null, // vamos buscar depois
-      source: "Overpass"
-    }));
-
-    // SALVA NO SUPABASE
-    if (leads.length > 0) {
-      await supabase.from('leads').insert(leads);
+  const { q, city } = req.query;
+  
+  const mockLeads = [
+    {
+      name: `${q} Teste 1`,
+      phone: "(21) 99999-9999",
+      address: `Rua Teste, ${city}`,
+      cnpj: null,
+      source: "Mock"
+    },
+    {
+      name: `${q} Teste 2`, 
+      phone: "(21) 98888-8888",
+      address: `Av Teste, ${city}`,
+      cnpj: null,
+      source: "Mock"
     }
+  ];
 
-    res.json(leads);
+  // Salva no supabase
+  await supabase.from('leads').insert(mockLeads);
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
-  }
+  res.json(mockLeads);
 });
 
 const PORT = process.env.PORT || 10000;
