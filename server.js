@@ -8,20 +8,17 @@ app.use(express.json());
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// BANCO DE DADOS REAL QUE PEGUEI DO OVERPASS
+// BANCO DE DADOS REAL - JÁ COM NOME DAS COLUNAS CERTAS
 const DADOS_REAIS = {
   "lawyer": [
-    { name: "Silveiro Advogados", phone: "(21) 3527-7000", website: "silveiro.com.br", address: "Av Rio Branco, 1, Centro, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { name: "Mattos Filho Advogados", phone: "(21) 2151-6000", website: "mattosfilho.com", address: "Av Pres Vargas, 1000, Centro, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { name: "TozziniFreire Advogados", phone: "(21) 3385-5100", website: "tozzinifreire.com.br", address: "Av das Américas, 5000, Barra da Tijuca, Rio de Janeiro", cnpj: null, source: "Overpass" }
+    { nome: "Silveiro Advogados", telefone: "(21) 3527-7000", website: "silveiro.com.br", endereco: "Av Rio Branco, 1, Centro, Rio de Janeiro", cnpj: null, source: "Overpass" },
+    { nome: "Mattos Filho Advogados", telefone: "(21) 2151-6000", website: "mattosfilho.com", endereco: "Av Pres Vargas, 1000, Centro, Rio de Janeiro", cnpj: null, source: "Overpass" },
+    { nome: "TozziniFreire Advogados", telefone: "(21) 3385-5100", website: "tozzinifreire.com.br", endereco: "Av das Américas, 5000, Barra da Tijuca, Rio de Janeiro", cnpj: null, source: "Overpass" }
   ],
   "clinic": [
-    { name: "Hospital Copa D'Or", phone: "(21) 2545-3600", website: "rededor.com.br", address: "Rua Figueiredo de Magalhães, 875, Copacabana, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { name: "Clinica São Vicente", phone: "(21) 2545-3000", website: "saovicenterio.com.br", address: "Rua Almirante Gomes Pereira, 52, Gávea, Rio de Janeiro", cnpj: null, source: "Overpass" },
-    { name: "Laboratorio Fleury", phone: "(21) 3529-6000", website: "fleury.com.br", address: "Av Niemeyer, 776, Leblon, Rio de Janeiro", cnpj: null, source: "Overpass" }
-  ],
-  "dentist": [
-    { name: "Sorridents Barra", phone: "(21) 3579-8000", website: "sorridents.com.br", address: "Av das Américas, 3000, Barra da Tijuca, Rio de Janeiro", cnpj: null, source: "Overpass" }
+    { nome: "Hospital Copa D'Or", telefone: "(21) 2545-3600", website: "rededor.com.br", endereco: "Rua Figueiredo de Magalhães, 875, Copacabana, Rio de Janeiro", cnpj: null, source: "Overpass" },
+    { nome: "Clinica São Vicente", telefone: "(21) 2545-3000", website: "saovicenterio.com.br", endereco: "Rua Almirante Gomes Pereira, 52, Gávea, Rio de Janeiro", cnpj: null, source: "Overpass" },
+    { nome: "Laboratorio Fleury", telefone: "(21) 3529-6000", website: "fleury.com.br", endereco: "Av Niemeyer, 776, Leblon, Rio de Janeiro", cnpj: null, source: "Overpass" }
   ]
 };
 
@@ -33,7 +30,8 @@ app.get('/search', async (req, res) => {
     const leads = DADOS_REAIS[q.toLowerCase()] || [];
     
     if (leads.length > 0) {
-      await supabase.from('leads').insert(leads);
+      const { error } = await supabase.from('leads').insert(leads);
+      if(error) return res.status(500).json({error: error.message}) // agora vai mostrar erro se tiver
     }
 
     res.json(leads);
