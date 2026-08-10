@@ -31,12 +31,7 @@ app.post('/api/leads/search', async (req, res) => {
     const { cidade, bairro, ramo } = req.body;
     if (!cidade || !ramo) return res.status(400).json({ error: 'cidade e ramo são obrigatórios' });
 
-    const queries = [
-      `${ramo} em ${cidade} ${bairro}`,
-      `${ramo} perto de ${cidade}`,
-      `melhor ${ramo} ${cidade}`
-    ];
-
+    const queries = [`${ramo} em ${cidade} ${bairro}`, `${ramo} perto de ${cidade}`, `melhor ${ramo} ${cidade}`];
     let allPlaces = [];
 
     for (const query of queries) {
@@ -52,21 +47,14 @@ app.post('/api/leads/search', async (req, res) => {
     const uniquePlaces = Array.from(new Map(allPlaces.map(p => [p.place_id, p])).values()).slice(0, 50);
 
     const leadsToInsert = uniquePlaces.map(place => ({
-      nome: place.name,
-      telefone: null,
-      endereco: place.formatted_address,
-      cidade: cidade,
-      ramo: ramo,
-      lat: place.geometry.location.lat,
-      lng: place.geometry.location.lng,
-      fonte: 'Google Maps'
+      nome: place.name, telefone: null, endereco: place.formatted_address,
+      cidade, ramo, lat: place.geometry.location.lat, lng: place.geometry.location.lng, fonte: 'Google Maps'
     }));
 
     const { error } = await supabase.from('leads').insert(leadsToInsert);
     if (error) throw error;
 
     res.json({ message: 'Busca concluída e salva no banco', total: leadsToInsert.length });
-
   } catch (error) {
     console.error(error.response ? error.response.data : error.message);
     res.status(500).json({ error: error.message });
@@ -78,7 +66,6 @@ app.get('/api/leads', async (req, res) => {
     const { cidade } = req.query;
     let query = supabase.from('leads').select('*');
     if (cidade) query = query.eq('cidade', cidade);
-    
     const { data, error } = await query;
     if (error) throw error;
     res.json(data);
@@ -87,6 +74,4 @@ app.get('/api/leads', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
