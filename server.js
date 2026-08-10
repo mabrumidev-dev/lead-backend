@@ -9,14 +9,12 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// CONFIG SUPABASE
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_KEY;
 
-// FUNÇÃO COM DELAY PRA NÃO TOMAR 429 - SÓ 1 VEZ
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function searchPlaces(query, pageToken = null) {
@@ -24,11 +22,10 @@ async function searchPlaces(query, pageToken = null) {
   if (pageToken) url += `&pagetoken=${pageToken}`;
   
   const response = await axios.get(url);
-  if (pageToken) await sleep(2000); // Espera 2s só se for página 2/3
+  if (pageToken) await sleep(2000);
   return response.data;
 }
 
-// ROTA PRINCIPAL
 app.post('/api/leads/search', async (req, res) => {
   try {
     const { cidade, bairro, ramo } = req.body;
@@ -48,14 +45,12 @@ app.post('/api/leads/search', async (req, res) => {
         const data = await searchPlaces(query, pageToken);
         if (data.results) allPlaces = allPlaces.concat(data.results);
         pageToken = data.next_page_token;
-        await sleep(1000); // 1s entre cada query
+        await sleep(1000);
       } while (pageToken && allPlaces.length < 60);
     }
 
-    // Remove duplicados pelo place_id
     const uniquePlaces = Array.from(new Map(allPlaces.map(p => [p.place_id, p])).values()).slice(0, 50);
 
-    // FORMATA PRA SALVAR NO SUPABASE
     const leadsToInsert = uniquePlaces.map(place => ({
       nome: place.name,
       telefone: null,
@@ -78,7 +73,6 @@ app.post('/api/leads/search', async (req, res) => {
   }
 });
 
-// ROTA PRA LER OS LEADS
 app.get('/api/leads', async (req, res) => {
   try {
     const { cidade } = req.query;
