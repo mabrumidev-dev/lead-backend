@@ -7,71 +7,79 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 10000;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+// ROTA DE TESTE
+app.get('/', (req, res) => {
+  res.json({ status: "Backend Online" });
+});
 
-const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_KEY;
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function searchPlaces(query, pageToken = null) {
-  let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
-  if (pageToken) url += `&pagetoken=${pageToken}`;
-  
-  const response = await axios.get(url);
-  if (pageToken) await sleep(2000);
-  return response.data;
-}
-
-app.post('/api/leads/search', async (req, res) => {
+// ROTA PRINCIPAL DE BUSCA
+app.get('/search', async (req, res) => {
   try {
-    const { cidade, bairro, ramo } = req.body;
-    if (!cidade || !ramo) return res.status(400).json({ error: 'cidade e ramo são obrigatórios' });
+    const { q, city } = req.query;
+    if (!q || !city) return res.status(400).json({ error: "Faltou q ou city" });
 
-    const queries = [`${ramo} em ${cidade} ${bairro}`, `${ramo} perto de ${cidade}`, `melhor ${ramo} ${cidade}`];
-    let allPlaces = [];
+    console.log(`Buscando: ${q} em ${city}`);
 
-    for (const query of queries) {
-      let pageToken = null;
-      do {
-        const data = await searchPlaces(query, pageToken);
-        if (data.results) allPlaces = allPlaces.concat(data.results);
-        pageToken = data.next_page_token;
-        await sleep(1000);
-      } while (pageToken && allPlaces.length < 60);
+    // 1. BUSCA NO OVERPASS - GRATIS
+    const overpassQuery = `
+      [out:json][timeout:25];
+      area["name"="${city}"]->.searchArea;
+      (
+        node["office"="${q}"]["name"](area.searchArea);
+        way["office"="${q}"]["name"](area.searchArea);
+      );
+      out center 50;
+    `;
+
+    const overpassRes = await axios.post('https://overpass-api.de/api/interpreter', overpassQuery);
+    const elements = overpassRes.data.elements || [];
+
+    let leads = [];
+
+    // 2. PRA CADA RESULTADO BUSCA CNPJ
+    for (const el of elements) {
+      const name = el.tags.name;
+      
+      // Tenta achar CNPJ pelo nome
+      try {
+        const cnpjRes = await axios.get(`https://publica.cnpj.ws/cnpj/${name.replace(/\s/g, '')}`);
+        if (cnpjRes.data) {
+          leads.push({
+            name: name,
+            cnpj: cnpjRes.data.estabelecimento?.cnpj || null,
+            phone: cnpjRes.data.estabelecimento?.ddd1 + cnpjRes.data.estabelecimento?.telefone1 || null,
+            address: `${el.tags['addr:street'] || ''}, ${city}`,
+            source: "Overpass + CNPJ.ws"
+          });
+        }
+      } catch(e) {
+        leads.push({
+          name: name,
+          cnpj: null,
+          phone: null,
+          address: `${el.tags['addr:street'] || ''}, ${city}`,
+          source: "Overpass"
+        });
+      }
     }
 
-    const uniquePlaces = Array.from(new Map(allPlaces.map(p => [p.place_id, p])).values()).slice(0, 50);
+    // 3. SALVA NO SUPABASE
+    if (leads.length > 0) {
+      await supabase.from('leads').insert(leads);
+    }
 
-    const leadsToInsert = uniquePlaces.map(place => ({
-      nome: place.name, telefone: null, endereco: place.formatted_address,
-      cidade, ramo, lat: place.geometry.location.lat, lng: place.geometry.location.lng, fonte: 'Google Maps'
-    }));
+    res.json(leads);
 
-    const { error } = await supabase.from('leads').insert(leadsToInsert);
-    if (error) throw error;
-
-    res.json({ message: 'Busca concluída e salva no banco', total: leadsToInsert.length });
   } catch (error) {
-    console.error(error.response ? error.response.data : error.message);
+    console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/leads', async (req, res) => {
-  try {
-    const { cidade } = req.query;
-    let query = supabase.from('leads').select('*');
-    if (cidade) query = query.eq('cidade', cidade);
-    const { data, error } = await query;
-    if (error) throw error;
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Server rodando na porta ${PORT}`));
