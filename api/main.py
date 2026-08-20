@@ -1,5 +1,6 @@
 """
 FastAPI backend for Google Maps Scraper integration.
+Serves both API endpoints and the built React frontend.
 """
 
 import sys
@@ -10,6 +11,8 @@ import threading
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -225,3 +228,16 @@ async def cancel_scrape(job_id: str):
             return {"error": "Job nao encontrado"}
         job["status"] = "cancelled"
     return {"status": "cancelled"}
+
+
+DIST_DIR = os.path.join(os.path.dirname(__file__), "..", "dist")
+
+if os.path.isdir(DIST_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(DIST_DIR, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = os.path.join(DIST_DIR, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(DIST_DIR, "index.html"))

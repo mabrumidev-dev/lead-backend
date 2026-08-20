@@ -23,6 +23,7 @@ __pycache__/
 *.pyo
 api/__pycache__/
 api/*.pyc
+api/test_syntax.py
 
 # Chrome user data
 api/chrome_user_data/

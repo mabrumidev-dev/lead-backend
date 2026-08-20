@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 
-const API_BASE = 'http://localhost:8002'
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.port !== '5173' ? window.location.origin : 'http://localhost:8002')
 
 export interface QSAItem {
   nome: string

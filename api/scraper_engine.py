@@ -2,6 +2,9 @@
 Scraper engine with live screenshot support and lead limit.
 """
 
+import sys
+import os
+
 from bs4 import BeautifulSoup
 from time import sleep
 import time
@@ -9,16 +12,36 @@ import re
 import random
 import base64
 import requests
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as Ec
-from selenium.common.exceptions import WebDriverException, JavascriptException
-import undetected_chromedriver as uc
-import ctypes
-from ctypes import wintypes
 from typing import Callable, Optional
+
+_SILENT_IMPORT_ERRORS = os.environ.get("RENDER") is not None
+
+try:
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as Ec
+    from selenium.common.exceptions import WebDriverException, JavascriptException
+    import undetected_chromedriver as uc
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+    else:
+        ctypes = None
+        wintypes = None
+except ImportError:
+    if not _SILENT_IMPORT_ERRORS:
+        raise
+    WebDriverWait = None
+    Ec = None
+    WebDriverException = Exception
+    JavascriptException = Exception
+    uc = None
+    ctypes = None
+    wintypes = None
 
 
 def get_chrome_version():
+    if sys.platform != "win32" or ctypes is None:
+        return None
     try:
         chrome_path = uc.find_chrome_executable()
     except Exception:
