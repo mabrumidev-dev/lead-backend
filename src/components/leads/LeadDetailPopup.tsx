@@ -271,9 +271,9 @@ ${Object.entries(lead.SocialMedia).filter(([, v]) => v?.url && !v?.not_found).ma
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-8 pb-4 sm:pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={onClose}>
       <div
-        className="relative w-full max-w-5xl rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl"
+        className="relative w-full max-w-5xl mx-2 sm:mx-4 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <button
@@ -287,7 +287,7 @@ ${Object.entries(lead.SocialMedia).filter(([, v]) => v?.url && !v?.not_found).ma
           <h2 className="text-lg font-bold text-cyan-400 mb-1 pr-8">{lead.Name}</h2>
           <p className="text-xs text-slate-500 mb-4">Dados do Google Maps</p>
 
-          <div className="grid grid-cols-2 gap-x-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
             <Field emoji="📞" label="Telefone" value={lead.Phone} />
             <Field emoji="⭐" label="Avaliação" value={lead.Rating ? `${lead.Rating} (${lead['Total Reviews'] ?? 0} reviews)` : null} />
             <Field emoji="📍" label="Endereço Google" value={lead.Address} />
@@ -309,7 +309,7 @@ ${Object.entries(lead.SocialMedia).filter(([, v]) => v?.url && !v?.not_found).ma
                 }`}>{fmt(lead.SituacaoCadastral)}</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-x-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
                 <Field emoji="📋" label="CNPJ" value={fmtCNPJ(lead.CNPJ!)} />
                 <Field emoji="📑" label="Razão Social" value={lead.RazaoSocial} />
                 <Field emoji="🏷️" label="Nome Fantasia" value={lead.NomeFantasia} />
@@ -330,7 +330,7 @@ ${Object.entries(lead.SocialMedia).filter(([, v]) => v?.url && !v?.not_found).ma
                 <span className="text-base">📍</span>
                 <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Endereço</h3>
               </div>
-              <div className="grid grid-cols-2 gap-x-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
                 <Field emoji="🏠" label="Logradouro" value={lead.EnderecoCompleto} />
                 <Field emoji="📮" label="CEP" value={lead.CEP} />
                 <Field emoji="🗺️" label="UF" value={lead.UF} />
@@ -344,7 +344,7 @@ ${Object.entries(lead.SocialMedia).filter(([, v]) => v?.url && !v?.not_found).ma
                 <span className="text-base">📞</span>
                 <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Contato</h3>
               </div>
-              <div className="grid grid-cols-2 gap-x-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
                 <Field emoji="📱" label="Telefone 1" value={lead.Telefone1} />
                 <Field emoji="📱" label="Telefone 2" value={lead.Telefone2} />
                 <Field emoji="✉️" label="Email" value={lead.Email} />
@@ -569,7 +569,7 @@ function SocialMediaSection({ lead }: { lead: ScrapedLead }) {
       </div>
 
       {found.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
           {found.map(([platform, data]) => {
             const style = SOCIAL_ICONS[platform] || { color: 'text-slate-400', bg: 'bg-slate-700/10', border: 'border-slate-600/25', icon: '🔗' }
             return (

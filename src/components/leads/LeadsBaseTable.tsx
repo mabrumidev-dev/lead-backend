@@ -43,7 +43,7 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
 
   if (leads.length === 0) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-4 sm:p-8 text-center">
         <p className="text-slate-500 text-lg">Nenhum lead na base ainda.</p>
         <p className="text-slate-500 mt-2">Capture leads no módulo "Buscar Leads" e clique em "Adicionar na Base" para adicioná-los aqui.</p>
       </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Users, Send, LogOut, Shield, Target, Database, Bell, User, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map } from 'lucide-react'
+import { Search, Users, Send, LogOut, Shield, Target, Database, Bell, User, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu, X } from 'lucide-react'
 import { useLeads } from '@/hooks/useLeads'
 import { useBaseLeads } from '@/hooks/useBaseLeads'
 import { LeadsFilters } from '@/components/leads/LeadsFilters'
@@ -158,6 +158,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'buscar' | 'base' | 'disparo' | 'importar' | 'scraper'>('buscar')
   const [activeFiltersState, setActiveFiltersState] = useState<FilterOptions>(INITIAL_FILTERS)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const { leads, loading, error, refetch, deleteLead, deleteMultipleLeads } = useLeads(activeFiltersState)
   const { baseLeads, addLeadToBase, removeLeadFromBase, updateLeadStatus } = useBaseLeads(userId)
 
@@ -296,19 +297,34 @@ export default function App() {
       <ToastContainer toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
       <div className="flex min-h-screen bg-[#050A1A] text-white relative overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(0,119,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,119,255,0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
-        <aside className="w-64 bg-slate-900/50 border-r border-slate-800 p-4 flex-col backdrop-blur-xl z-10">
-          <div className="flex items-center gap-3 mb-10">
-            <LogoIcon className="w-10 h-10" />
-            <div><h1 className="font-bold text-lg tracking-wider">MABRUMI</h1><p className="text-xs text-slate-400">CORRETORA</p></div>
+
+        {sidebarOpen && (
+          <div className="fixed inset-0 bg-black/60 z-30 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        )}
+
+        <aside className={`
+          fixed lg:static inset-y-0 left-0 z-40
+          w-64 bg-slate-900/95 lg:bg-slate-900/50 border-r border-slate-800 p-4 flex-col backdrop-blur-xl
+          transform transition-transform duration-300 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-3">
+              <LogoIcon className="w-10 h-10" />
+              <div><h1 className="font-bold text-lg tracking-wider">MABRUMI</h1><p className="text-xs text-slate-400">CORRETORA</p></div>
+            </div>
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
+              <X size={20} />
+            </button>
           </div>
           <nav className="flex-1 space-y-2">
             <button 
-              onClick={() => setActiveTab('buscar')} 
+              onClick={() => { setActiveTab('buscar'); setSidebarOpen(false) }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${activeTab === 'buscar' ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border-l-4 border-cyan-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
               <Search size={18} /> Buscar Leads
             </button>
             <button 
-              onClick={() => setActiveTab('base')} 
+              onClick={() => { setActiveTab('base'); setSidebarOpen(false) }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${activeTab === 'base' ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border-l-4 border-cyan-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
               <Users size={18} /> Base de Leads
               {baseLeads.length > 0 && (
@@ -316,36 +332,50 @@ export default function App() {
               )}
             </button>
             <button 
-              onClick={() => setActiveTab('disparo')} 
+              onClick={() => { setActiveTab('disparo'); setSidebarOpen(false) }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${activeTab === 'disparo' ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border-l-4 border-cyan-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
               <Send size={18} /> Disparo WhatsApp
             </button>
             <div className="border-t border-slate-800 my-2" />
             <button 
-              onClick={() => setActiveTab('scraper')} 
+              onClick={() => { setActiveTab('scraper'); setSidebarOpen(false) }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${activeTab === 'scraper' ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border-l-4 border-green-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
               <Map size={18} /> Google Maps
             </button>
             <button 
-              onClick={() => setActiveTab('importar')} 
+              onClick={() => { setActiveTab('importar'); setSidebarOpen(false) }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${activeTab === 'importar' ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 border-l-4 border-cyan-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}>
               <Upload size={18} /> Importar CSV
             </button>
           </nav>
           <button onClick={() => { supabase.auth.signOut(); setIsLogged(false); setUserId(null) }} className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"><LogOut size={18} /> Sair</button>
         </aside>
-        <main className="flex-1 p-8 overflow-y-auto z-10">
-          <div className="flex justify-between items-center mb-8">
-            <div><h1 className="text-3xl font-bold">Olá, Corretor 👋</h1><p className="text-slate-400">Bem-vindo ao seu painel de inteligência comercial</p></div>
-            <div className="flex items-center gap-4"><Bell className="text-slate-400 hover:text-white cursor-pointer" /><div className="flex items-center gap-2 bg-slate-800/50 px-3 py-2 rounded-lg"><User size={18}/> <span>Admin</span></div></div>
+
+        <main className="flex-1 min-w-0 overflow-y-auto z-10">
+          <div className="flex items-center gap-3 mb-6 p-4 lg:p-8 lg:mb-0">
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-lg bg-slate-800/50 text-slate-400 hover:text-white">
+              <Menu size={20} />
+            </button>
+            <div className="flex-1">
+              <h1 className="text-xl lg:text-3xl font-bold">Olá, Corretor 👋</h1>
+              <p className="text-slate-400 text-sm lg:text-base">Bem-vindo ao seu painel de inteligência comercial</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Bell className="text-slate-400 hover:text-white cursor-pointer hidden sm:block" />
+              <div className="flex items-center gap-2 bg-slate-800/50 px-3 py-2 rounded-lg text-sm">
+                <User size={16}/> <span className="hidden sm:inline">Admin</span>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-slate-900/50 border-slate-800 rounded-xl p-6 hover:border-cyan-500/50 transition backdrop-blur-xl"><Database className="text-cyan-400 mb-3" size={24}/><p className="text-slate-400 text-sm">Leads na Base</p><p className="text-4xl font-bold mt-2">{baseLeads.length}</p><p className="text-xs text-slate-500 mt-1">{leads.length} disponíveis</p></div>
-            <div className="bg-slate-900/50 border-slate-800 rounded-xl p-6 hover:border-green-500/50 transition backdrop-blur-xl"><Shield className="text-green-400 mb-3" size={24}/><p className="text-slate-400 text-sm">Qualificados</p><p className="text-4xl font-bold mt-2">{baseLeads.filter(l => l.status === 'qualified').length}</p><p className="text-xs text-slate-500 mt-1">de {baseLeads.length} na base</p></div>
-            <div className="bg-slate-900/50 border-slate-800 rounded-xl p-6 hover:border-purple-500/50 transition backdrop-blur-xl"><Target className="text-purple-400 mb-3" size={24}/><p className="text-slate-400 text-sm">Contactados</p><p className="text-4xl font-bold mt-2">{baseLeads.filter(l => l.status === 'contacted').length}</p><p className="text-xs text-slate-500 mt-1">disparos realizados</p></div>
-          </div>
-          <div className="bg-slate-900/50 border-slate-800 rounded-xl p-8 backdrop-blur-xl">
-            {getTabContent()}
+          <div className="px-4 lg:px-8 pb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-6 mb-6 lg:mb-8">
+              <div className="bg-slate-900/50 border-slate-800 rounded-xl p-4 lg:p-6 hover:border-cyan-500/50 transition backdrop-blur-xl"><Database className="text-cyan-400 mb-3" size={24}/><p className="text-slate-400 text-sm">Leads na Base</p><p className="text-3xl lg:text-4xl font-bold mt-2">{baseLeads.length}</p><p className="text-xs text-slate-500 mt-1">{leads.length} disponíveis</p></div>
+              <div className="bg-slate-900/50 border-slate-800 rounded-xl p-4 lg:p-6 hover:border-green-500/50 transition backdrop-blur-xl"><Shield className="text-green-400 mb-3" size={24}/><p className="text-slate-400 text-sm">Qualificados</p><p className="text-3xl lg:text-4xl font-bold mt-2">{baseLeads.filter(l => l.status === 'qualified').length}</p><p className="text-xs text-slate-500 mt-1">de {baseLeads.length} na base</p></div>
+              <div className="bg-slate-900/50 border-slate-800 rounded-xl p-4 lg:p-6 hover:border-purple-500/50 transition backdrop-blur-xl"><Target className="text-purple-400 mb-3" size={24}/><p className="text-slate-400 text-sm">Contactados</p><p className="text-3xl lg:text-4xl font-bold mt-2">{baseLeads.filter(l => l.status === 'contacted').length}</p><p className="text-xs text-slate-500 mt-1">disparos realizados</p></div>
+            </div>
+            <div className="bg-slate-900/50 border-slate-800 rounded-xl p-4 lg:p-8 backdrop-blur-xl">
+              {getTabContent()}
+            </div>
           </div>
         </main>
       </div>

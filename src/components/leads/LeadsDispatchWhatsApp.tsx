@@ -158,8 +158,8 @@ export const LeadsDispatchWhatsApp: React.FC<{
   }
 
   return (
-    <div className="p-8 bg-slate-900/50 rounded-xl p-8 backdrop-blur-xl">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-8 bg-slate-900/50 rounded-xl backdrop-blur-xl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 sm:mb-8 gap-3">
         <div>
           <h2 className="text-2xl font-bold">Disparo WhatsApp</h2>
           <p className="text-slate-400 mb-2">Enviar mensagem personalizada para leads da base</p>

@@ -246,7 +246,7 @@ export const ImportLeads: React.FC<ImportLeadsProps> = ({ onImportComplete, onBa
       ) : (
         <div>
           {importResult ? (
-            <div className="text-center p-8">
+            <div className="text-center p-4 sm:p-8">
               {importResult.success > 0 && (
                 <div className="mb-4">
                   <CheckCircle size={48} className="text-green-400 mx-auto mb-3" />

@@ -113,7 +113,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
 
   if (leads.length === 0) {
     return (
-      <div className="p-8 text-center">
+      <div className="p-4 sm:p-8 text-center">
         <p className="text-slate-500 text-lg">Nenhum lead encontrado.</p>
         <p className="text-slate-500 mt-2">Os leads do seu Supabase devem aparecer abaixo.</p>
       </div>
@@ -127,7 +127,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
           ⚠️ {error}
         </div>
       )}
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -138,6 +138,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
             className="w-full bg-slate-800/50 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
           />
         </div>
+        <div className="flex items-center gap-2">
         {search && (
           <button onClick={() => setSearch('')} className="text-slate-400 hover:text-white text-sm">
             Limpar
@@ -169,11 +170,12 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
         >
           <Download size={16} />
         </button>
+        </div>
       </div>
       {selected.size > 0 && (
-        <div className="mb-3 flex items-center gap-3 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+        <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
           <span className="text-sm text-cyan-400 font-medium">{selected.size} selecionado(s)</span>
-          <div className="flex gap-2 ml-auto">
+          <div className="flex gap-2 sm:ml-auto flex-wrap">
             <button
               onClick={() => {
                 const csv = selectedLeads.map((l: any) => [
@@ -320,8 +322,8 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
           return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
         }
         return (
-          <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setViewLead(null)}>
-            <div className="relative w-full max-w-5xl rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-8 pb-4 sm:pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setViewLead(null)}>
+            <div className="relative w-full max-w-5xl mx-2 sm:mx-4 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
               <button onClick={() => setViewLead(null)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors z-10">
                 <XCircle size={18} />
               </button>
@@ -329,7 +331,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                 <h2 className="text-lg font-bold text-cyan-400 mb-1 pr-8">{viewLead.name || viewLead.nome || 'Lead'}</h2>
                 <p className="text-xs text-slate-500 mb-4">Dados do lead</p>
 
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                   <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Telefone</p><p className="text-sm text-slate-200">📞 {viewLead.phone || viewLead.telefone || 'Não informado'}</p></div>
                   <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Email</p><p className="text-sm text-slate-200">✉️ {enriched?.Email || viewLead.email || 'Não informado'}</p></div>
                   <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Cidade</p><p className="text-sm text-slate-200">📍 {viewLead.city || viewLead.cidade || 'Não informado'}</p></div>
@@ -352,7 +354,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                         }`}>{enriched.SituacaoCadastral}</span>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                       {enriched.CNPJ && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">CNPJ</p><p className="text-sm text-slate-200">📋 {fmtCNPJ(enriched.CNPJ)}</p></div>}
                       {enriched.RazaoSocial && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Razão Social</p><p className="text-sm text-slate-200">{enriched.RazaoSocial}</p></div>}
                       {enriched.NomeFantasia && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Nome Fantasia</p><p className="text-sm text-slate-200">{enriched.NomeFantasia}</p></div>}
@@ -453,7 +455,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                             )}
                           </div>
                           {found.length > 0 && (
-                            <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                               {found.map(([platform, data]: [string, any]) => {
                                 const style = SOCIAL_ICONS[platform] || { color: 'text-slate-400', bg: 'bg-slate-700/10', border: 'border-slate-600/25', icon: '🔗' }
                                 return (
@@ -491,7 +493,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                           <span className="text-base">🌐</span>
                           <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Google Maps</h3>
                         </div>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                           {enriched.Address && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Endereço Maps</p><p className="text-sm text-slate-200">{enriched.Address}</p></div>}
                           <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Avaliação</p><p className="text-sm text-slate-200">⭐ {enriched.Rating || 'N/A'} ({enriched['Total Reviews'] || 0} reviews)</p></div>
                           <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Site</p>

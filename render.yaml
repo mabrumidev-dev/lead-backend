@@ -19,3 +19,7 @@ services:
         value: "18"
       - key: RENDER
         value: "true"
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
