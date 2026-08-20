@@ -6,6 +6,6 @@ npm install
 npm run build
 
 echo "=== Installing Python deps ==="
-pip install -r api/requirements.txt
+pip install -r requirements.txt
 
 echo "=== Build complete ==="

@@ -3,12 +3,19 @@ services:
     name: lead-backend
     runtime: python
     plan: free
-    buildCommand: bash build.sh
-    startCommand: cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: |
+      python -m venv .venv
+      . .venv/bin/activate
+      pip install -r requirements.txt
+      npm install
+      npm run build
+    startCommand: |
+      . .venv/bin/activate
+      cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11.0"
-      - key: RENDER
-        value: "true"
+        value: "3.11"
       - key: NODE_VERSION
         value: "18"
+      - key: RENDER
+        value: "true"
