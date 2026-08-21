@@ -4,11 +4,16 @@ services:
     runtime: docker
     plan: starter
     dockerfilePath: Dockerfile
+    buildArgs:
+      - key: VITE_SUPABASE_URL
+        fromEnvVar: VITE_SUPABASE_URL
+      - key: VITE_SUPABASE_ANON_KEY
+        fromEnvVar: VITE_SUPABASE_ANON_KEY
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
       - key: NODE_VERSION
-        value: "18"
+        value: "20"
       - key: RENDER
         value: "true"
       - key: VITE_SUPABASE_URL
