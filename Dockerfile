@@ -10,18 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget gnupg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir playwright==1.49.1 \
-    && playwright install chromium \
-    && playwright install-deps chromium
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+RUN apt-get update && playwright install-deps chromium && rm -rf /var/lib/apt/lists/*
+RUN playwright install chromium
+
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json* ./
+COPY package.json ./
 RUN npm install
 
 COPY . .
