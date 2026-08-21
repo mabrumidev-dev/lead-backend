@@ -1,10 +1,13 @@
 // @ts-nocheck
 import { createClient } from '@supabase/supabase-js'
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.com',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
-)
+const win = (typeof window !== 'undefined' ? (window as any) : {})
+const runtimeConfig = win.__SUPABASE_CONFIG__ || {}
+
+const supabaseUrl = runtimeConfig.url || import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.com'
+const supabaseKey = runtimeConfig.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
 
 export type Database = {
   public: {
