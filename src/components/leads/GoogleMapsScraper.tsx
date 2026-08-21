@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Play, XCircle, Loader2, MapPin, Phone, Globe, Star, Download, RotateCcw, Eye, FileDown, User, Building2, ChevronDown, ArrowDownUp, Share2 } from 'lucide-react'
+import { Search, Play, XCircle, Loader2, MapPin, Phone, Globe, Star, Download, RotateCcw, Eye, FileDown, User, Building2, ChevronDown, ArrowDownUp, Share2, AlertTriangle } from 'lucide-react'
 import { useScraper, ScrapedLead } from '@/hooks/useScraper'
 import LeadDetailPopup from '@/components/leads/LeadDetailPopup'
 import { supabase } from '@/hooks/useLeads'
@@ -343,12 +343,24 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
 
   const isActive = isScraping || (job && job.status !== 'done' && job.status !== 'error' && job.status !== 'cancelled')
 
+  const isRemote = typeof window !== 'undefined' && window.location.port !== '5173'
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-white mb-2">Google Maps Scraper</h2>
         <p className="text-slate-400 text-sm">Extraia leads diretamente do Google Maps. Chrome roda em segundo plano com preview ao vivo.</p>
       </div>
+
+      {isRemote && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle size={20} className="text-amber-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-amber-400 font-semibold text-sm">Scraper indisponivel no servidor remoto</p>
+            <p className="text-slate-400 text-xs mt-1">O Google Maps Scraper requer Chrome local. Para usar, acesse via <a href="http://localhost:5173" className="text-cyan-400 underline">localhost:5173</a> ou importe leads via CSV.</p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-4 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
