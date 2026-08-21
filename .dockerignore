@@ -1,0 +1,13 @@
+node_modules
+dist
+__pycache__
+*.pyc
+.env
+.git
+api/chrome_user_data
+api/test_syntax.py
+con
+arq_backup_app.jsx
+render.yaml
+*.bat
+*.md

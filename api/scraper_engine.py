@@ -14,76 +14,11 @@ import base64
 import requests
 from typing import Callable, Optional
 
-_SILENT_IMPORT_ERRORS = os.environ.get("RENDER") is not None
-
 try:
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as Ec
-    from selenium.common.exceptions import WebDriverException, JavascriptException
-    import undetected_chromedriver as uc
-    if sys.platform == "win32":
-        import ctypes
-        from ctypes import wintypes
-    else:
-        ctypes = None
-        wintypes = None
+    from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 except ImportError:
-    if not _SILENT_IMPORT_ERRORS:
-        raise
-    WebDriverWait = None
-    Ec = None
-    WebDriverException = Exception
-    JavascriptException = Exception
-    uc = None
-    ctypes = None
-    wintypes = None
-
-
-def get_chrome_version():
-    if sys.platform != "win32" or ctypes is None:
-        return None
-    try:
-        chrome_path = uc.find_chrome_executable()
-    except Exception:
-        chrome_path = None
-    if not chrome_path:
-        return None
-
-    class VS_FIXEDFILEINFO(ctypes.Structure):
-        _fields_ = [
-            ("dwSignature", wintypes.DWORD),
-            ("dwStrucVersion", wintypes.DWORD),
-            ("dwFileVersionMS", wintypes.DWORD),
-            ("dwFileVersionLS", wintypes.DWORD),
-            ("dwProductVersionMS", wintypes.DWORD),
-            ("dwProductVersionLS", wintypes.DWORD),
-            ("dwFileFlagsMask", wintypes.DWORD),
-            ("dwFileFlags", wintypes.DWORD),
-            ("dwFileOS", wintypes.DWORD),
-            ("dwFileType", wintypes.DWORD),
-            ("dwFileSubtype", wintypes.DWORD),
-            ("dwFileDateMS", wintypes.DWORD),
-            ("dwFileDateLS", wintypes.DWORD),
-        ]
-
-    try:
-        size = ctypes.windll.version.GetFileVersionInfoSizeW(chrome_path, None)
-        if not size:
-            return None
-        data = ctypes.create_string_buffer(size)
-        if not ctypes.windll.version.GetFileVersionInfoW(chrome_path, None, size, data):
-            return None
-        info = VS_FIXEDFILEINFO()
-        ptr = ctypes.c_void_p()
-        length = wintypes.UINT()
-        if not ctypes.windll.version.VerQueryValueW(
-            data, "\\", ctypes.byref(ptr), ctypes.byref(length)
-        ):
-            return None
-        ctypes.memmove(ctypes.byref(info), ptr, ctypes.sizeof(info))
-        return (info.dwFileVersionMS >> 16) & 0xFFFF
-    except Exception:
-        return None
+    sync_playwright = None
+    PlaywrightTimeout = Exception
 
 
 def _extract_cnpj_from_html(html: str) -> Optional[str]:
@@ -623,15 +558,17 @@ class ScraperEngine:
         self.search_query = search_query
         self.limit = limit
         self.on_progress = on_progress or (lambda msg, pct: None)
-        self.timeout = 60
-        self.driver = None
+        self.timeout = 60000
+        self.browser = None
+        self.page = None
+        self._pw = None
         self._cancelled = False
 
     def cancel(self):
         self._cancelled = True
-        if self.driver:
+        if self.browser:
             try:
-                self.driver.quit()
+                self.browser.close()
             except Exception:
                 pass
 
@@ -640,9 +577,9 @@ class ScraperEngine:
 
     def _screenshot(self):
         try:
-            if not self.driver:
+            if not self.page:
                 return
-            png = self.driver.get_screenshot_as_png()
+            png = self.page.screenshot()
             b64 = base64.b64encode(png).decode("utf-8")
             self.on_progress("", -2, b64)
         except Exception:
@@ -651,15 +588,18 @@ class ScraperEngine:
     def _opening_url(self, url: str):
         while True:
             if self._cancelled:
-                if self.driver:
+                if self.browser:
                     try:
-                        self.driver.quit()
+                        self.browser.close()
                     except Exception:
                         pass
                 return False
             try:
-                self.driver.get(url)
-            except WebDriverException:
+                self.page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
+            except PlaywrightTimeout:
+                sleep(5)
+                continue
+            except Exception:
                 sleep(5)
                 continue
             else:
@@ -671,15 +611,11 @@ class ScraperEngine:
             sleep(2)
             self._screenshot()
 
-            infoSheet = self.driver.execute_script(
-                "return document.querySelector(\"[role='main']\")"
-            )
-
             for _ in range(15):
                 if self._cancelled:
                     return None
-                found = self.driver.execute_script("""
-                    return document.querySelector("h1.DUwDvf") !== null ||
+                found = self.page.evaluate("""
+                    () => document.querySelector("h1.DUwDvf") !== null ||
                            document.querySelector("h1") !== null ||
                            document.querySelector("[data-attrid='title']") !== null
                 """)
@@ -690,15 +626,16 @@ class ScraperEngine:
             rating = totalReviews = address = websiteUrl = phone = None
 
             html = None
-            if infoSheet:
-                try:
-                    html = infoSheet.get_attribute("outerHTML")
-                except Exception:
-                    pass
+            try:
+                el = self.page.query_selector("[role='main']")
+                if el:
+                    html = el.evaluate("el => el.outerHTML")
+            except Exception:
+                pass
 
             if not html:
                 try:
-                    html = self.driver.execute_script("return document.body.innerHTML")
+                    html = self.page.evaluate("() => document.body.innerHTML")
                 except Exception:
                     return None
 
@@ -782,34 +719,39 @@ class ScraperEngine:
 
     def scrape(self) -> list[dict]:
         try:
+            if not sync_playwright:
+                self._msg("Playwright nao esta instalado.", -1)
+                return []
+
             query_with_plus = "+".join(self.search_query.split())
             link_of_page = f"https://www.google.com/maps/search/{query_with_plus}/"
 
             final_data = []
 
-            self._msg("Verificando ChromeDriver...", 5)
+            self._msg("Iniciando Chromium...", 5)
 
-            options = uc.ChromeOptions()
-            options.add_argument("--headless=new")
-            options.add_argument("--window-size=1280,900")
-            prefs = {"profile.managed_default_content_settings.images": 2}
-            options.add_experimental_option("prefs", prefs)
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-
-            chrome_version = get_chrome_version()
-            driver_kwargs = {"options": options}
-            if chrome_version:
-                driver_kwargs["version_main"] = chrome_version
-
+            self._pw = sync_playwright().start()
             try:
-                self.driver = uc.Chrome(**driver_kwargs)
+                self.browser = self._pw.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-gpu",
+                    ],
+                )
             except Exception as e:
-                self._msg(f"Erro ao iniciar Chrome: {str(e)}", -1)
+                self._msg(f"Erro ao iniciar Chromium: {str(e)}", -1)
                 return []
 
-            self.driver.implicitly_wait(self.timeout)
+            context = self.browser.new_context(
+                viewport={"width": 1280, "height": 900},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            context.route("**/*.{png,jpg,jpeg,gif,svg,webp}", lambda route: route.abort())
+            self.page = context.new_page()
+
             self._msg("Abrindo Google Maps...", 10)
 
             if not self._opening_url(link_of_page):
@@ -819,22 +761,20 @@ class ScraperEngine:
             self._screenshot()
             self._msg("Carregando resultados...", 15)
 
-            scrollAbleElement = None
+            feed_element = None
             for _ in range(30):
                 if self._cancelled:
-                    self.driver.quit()
+                    self.browser.close()
                     return []
-                scrollAbleElement = self.driver.execute_script(
-                    "return document.querySelector(\"[role='feed']\")"
-                )
-                if scrollAbleElement is not None:
+                feed_element = self.page.query_selector("[role='feed']")
+                if feed_element is not None:
                     break
                 sleep(1)
 
-            if scrollAbleElement is None:
+            if feed_element is None:
                 self._msg("Nenhum resultado encontrado.", 100)
                 self._screenshot()
-                self.driver.quit()
+                self.browser.close()
                 return []
 
             last_height = 0
@@ -843,12 +783,11 @@ class ScraperEngine:
 
             while scroll_count < max_scrolls:
                 if self._cancelled:
-                    self.driver.quit()
+                    self.browser.close()
                     return []
 
-                self.driver.execute_script(
-                    "arguments[0].scrollTo(0, arguments[0].scrollHeight);",
-                    scrollAbleElement,
+                self.page.evaluate(
+                    "() => { const el = document.querySelector(\"[role='feed']\"); if(el) el.scrollTo(0, el.scrollHeight); }"
                 )
                 time.sleep(random.uniform(2, 4))
                 scroll_count += 1
@@ -857,23 +796,18 @@ class ScraperEngine:
                 if scroll_count % 5 == 0:
                     self._screenshot()
 
-                new_height = self.driver.execute_script(
-                    "return arguments[0].scrollHeight", scrollAbleElement
+                new_height = self.page.evaluate(
+                    "() => { const el = document.querySelector(\"[role='feed']\"); return el ? el.scrollHeight : 0; }"
                 )
                 if new_height == last_height:
-                    script = """
-                    const endingElement = document.querySelector(".PbZDve ");
-                    return endingElement;
-                    """
-                    endAlertElement = self.driver.execute_script(script)
-
+                    endAlertElement = self.page.query_selector(".PbZDve")
                     if endAlertElement is None:
                         try:
-                            self.driver.execute_script(
-                                "array=document.getElementsByClassName('hfpxzc');array[array.length-1].click();"
+                            self.page.evaluate(
+                                "() => { const a = document.getElementsByClassName('hfpxzc'); if(a.length) a[a.length-1].click(); }"
                             )
                             sleep(2)
-                        except JavascriptException:
+                        except Exception:
                             pass
                     else:
                         break
@@ -882,11 +816,12 @@ class ScraperEngine:
 
             self._screenshot()
 
-            allResultsListSoup = BeautifulSoup(
-                scrollAbleElement.get_attribute("outerHTML"), "html.parser"
+            feed_html = self.page.evaluate(
+                "() => { const el = document.querySelector(\"[role='feed']\"); return el ? el.outerHTML : ''; }"
             )
+            allResultsListSoup = BeautifulSoup(feed_html, "html.parser")
             allResultsAnchorTags = allResultsListSoup.find_all("a", class_="hfpxzc")
-            allResultsLinks = [a.get("href") for a in allResultsAnchorTags]
+            allResultsLinks = [a.get("href") for a in allResultsAnchorTags if a.get("href")]
 
             total_links = len(allResultsLinks)
             if self.limit > 0:
@@ -895,7 +830,7 @@ class ScraperEngine:
 
             for i in range(total_links):
                 if self._cancelled:
-                    self.driver.quit()
+                    self.browser.close()
                     return []
 
                 if self.limit > 0 and len(final_data) >= self.limit:
@@ -903,7 +838,7 @@ class ScraperEngine:
                     break
 
                 progress = 45 + int((i / total_links) * 50)
-                self._msg(f"Coletando {i + 1}/{total_links}... ({len(final_data)} válidos)", progress)
+                self._msg(f"Coletando {i + 1}/{total_links}... ({len(final_data)} validos)", progress)
 
                 try:
                     resultLink = allResultsLinks[i]
@@ -912,8 +847,8 @@ class ScraperEngine:
                 except Exception as e:
                     self._msg(f"Erro: {str(e)}", -1)
                     try:
-                        if self.driver:
-                            self.driver.quit()
+                        if self.browser:
+                            self.browser.close()
                     except Exception:
                         pass
                     return []
@@ -928,7 +863,8 @@ class ScraperEngine:
             self._screenshot()
 
             try:
-                self.driver.close()
+                self.browser.close()
+                self._pw.stop()
             except Exception:
                 pass
 
@@ -937,8 +873,10 @@ class ScraperEngine:
         except Exception as e:
             self._msg(f"Erro: {str(e)}", -1)
             try:
-                if self.driver:
-                    self.driver.quit()
+                if self.browser:
+                    self.browser.close()
+                if self._pw:
+                    self._pw.stop()
             except Exception:
                 pass
             return []

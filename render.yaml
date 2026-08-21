@@ -1,17 +1,9 @@
 services:
   - type: web
     name: lead-backend
-    runtime: python
-    plan: free
-    buildCommand: |
-      python -m venv .venv
-      . .venv/bin/activate
-      pip install -r requirements.txt
-      npm install
-      npm run build
-    startCommand: |
-      . .venv/bin/activate
-      cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    runtime: docker
+    plan: starter
+    dockerfilePath: Dockerfile
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"

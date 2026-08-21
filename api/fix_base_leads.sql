@@ -82,3 +82,7 @@ CREATE POLICY "rls_base_leads_update" ON base_leads FOR UPDATE USING (auth.role(
 
 DROP POLICY IF EXISTS "rls_base_leads_delete" ON base_leads;
 CREATE POLICY "rls_base_leads_delete" ON base_leads FOR DELETE USING (auth.role() = 'authenticated');
+
+-- Conceder permissões à role authenticated
+GRANT SELECT, INSERT, UPDATE, DELETE ON base_leads TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON base_leads TO service_role;
