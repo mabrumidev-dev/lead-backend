@@ -98,19 +98,25 @@ export function useScraper() {
   const startScrape = useCallback(async (query: string, limit: number = 0) => {
     if (!query.trim()) return
 
+    console.log('[SCRAPER] API_BASE:', API_BASE)
+    console.log('[SCRAPER] Query:', query.trim())
+
     setIsScraping(true)
     setJob({ jobId: '', status: 'starting', progress: 0, messages: ['Iniciando...'], results: [], screenshots: [] })
 
     try {
+      console.log('[SCRAPER] Fetching POST', `${API_BASE}/api/scrape`)
       const res = await fetch(`${API_BASE}/api/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query.trim(), limit }),
       })
 
+      console.log('[SCRAPER] Response status:', res.status)
       if (!res.ok) throw new Error('Erro ao conectar com o servidor do scraper')
 
       const { job_id } = await res.json()
+      console.log('[SCRAPER] Job ID:', job_id)
       setJob(prev => prev ? { ...prev, jobId: job_id, status: 'running' } : null)
 
       const es = new EventSource(`${API_BASE}/api/scrape/${job_id}/stream`)
@@ -168,6 +174,7 @@ export function useScraper() {
         es.close()
       }
     } catch (err: any) {
+      console.error('[SCRAPER] Error:', err.message)
       setJob(prev => prev ? {
         ...prev,
         status: 'error',
