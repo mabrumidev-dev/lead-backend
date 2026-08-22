@@ -745,7 +745,12 @@ class ScraperEngine:
                         "--disable-gpu",
                         "--disable-extensions",
                         "--disable-background-networking",
-                        "--js-flags=--max-old-space-size=256",
+                        "--disable-default-apps",
+                        "--disable-sync",
+                        "--disable-translate",
+                        "--no-first-run",
+                        "--mute-audio",
+                        "--js-flags=--max-old-space-size=64",
                     ],
                 )
             except Exception as e:
@@ -753,10 +758,12 @@ class ScraperEngine:
                 return []
 
             context = self.browser.new_context(
-                viewport={"width": 1280, "height": 900},
+                viewport={"width": 800, "height": 600},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             )
-            context.route("**/*.{png,jpg,jpeg,gif,svg,webp}", lambda route: route.abort())
+            context.route("**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}", lambda route: route.abort())
+            context.route("**/analytics**", lambda route: route.abort())
+            context.route("**/stats**", lambda route: route.abort())
             self.page = context.new_page()
 
             self._msg("Abrindo Google Maps...", 10)
@@ -835,10 +842,17 @@ class ScraperEngine:
                 total_links = min(total_links, self.limit)
             self._msg(f"Encontrados {len(allResultsLinks)} resultados. Coletando{f' (limite: {self.limit})' if self.limit > 0 else ''}...", 45)
 
+            try:
+                context.close()
+                self.browser.close()
+            except Exception:
+                pass
+            self.browser = None
+            self.page = None
+
             for i in range(total_links):
                 if self._cancelled:
-                    self.browser.close()
-                    return []
+                    return final_data
 
                 if self.limit > 0 and len(final_data) >= self.limit:
                     self._msg(f"Limite de {self.limit} leads atingido!", 100)
@@ -847,29 +861,65 @@ class ScraperEngine:
                 progress = 45 + int((i / total_links) * 50)
                 self._msg(f"Coletando {i + 1}/{total_links}... ({len(final_data)} validos)", progress)
 
+                resultLink = allResultsLinks[i]
+                fresh_context = None
+
                 try:
-                    resultLink = allResultsLinks[i]
-                    if not self._opening_url(resultLink):
-                        self._msg(f"Pulando {i + 1}/{total_links} (falha ao abrir)", progress)
-                        continue
+                    self.browser = self._pw.chromium.launch(
+                        headless=True,
+                        args=[
+                            "--no-sandbox",
+                            "--disable-dev-shm-usage",
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-gpu",
+                            "--disable-extensions",
+                            "--disable-background-networking",
+                            "--disable-default-apps",
+                            "--disable-sync",
+                            "--disable-translate",
+                            "--no-first-run",
+                            "--mute-audio",
+                            "--js-flags=--max-old-space-size=64",
+                        ],
+                    )
+                    fresh_context = self.browser.new_context(
+                        viewport={"width": 800, "height": 600},
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    )
+                    fresh_context.route("**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}", lambda route: route.abort())
+                    self.page = fresh_context.new_page()
                 except Exception as e:
-                    self._msg(f"Erro no lead {i + 1}: {str(e)}", progress)
+                    self._msg(f"Erro ao criar navegador: {str(e)}", progress)
                     continue
 
-                sleep(random.uniform(2, 4))
-                data = self._parsing()
-                if data:
-                    data["Link"] = allResultsLinks[i]
-                    final_data.append(data)
-                else:
-                    self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
+                try:
+                    if not self._opening_url(resultLink):
+                        self._msg(f"Pulando {i + 1}/{total_links} (falha ao abrir)", progress)
+                    else:
+                        sleep(random.uniform(2, 4))
+                        data = self._parsing()
+                        if data:
+                            data["Link"] = allResultsLinks[i]
+                            final_data.append(data)
+                        else:
+                            self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
+                except Exception as e:
+                    self._msg(f"Erro no lead {i + 1}: {str(e)}", progress)
+                finally:
+                    try:
+                        self.page = None
+                        if fresh_context:
+                            fresh_context.close()
+                        self.browser.close()
+                        self.browser = None
+                    except Exception:
+                        pass
 
             self._msg(f"Concluido! {len(final_data)} registros coletados.", 100)
-            self._screenshot()
 
             try:
-                self.browser.close()
-                self._pw.stop()
+                if self._pw:
+                    self._pw.stop()
             except Exception:
                 pass
 
