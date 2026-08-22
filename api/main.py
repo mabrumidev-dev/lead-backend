@@ -66,17 +66,24 @@ async def start_scrape(req: ScrapeRequest):
                     jobs[job_id]["progress"] = progress
 
     def run_scraper():
-        engine = ScraperEngine(
-            search_query=req.query,
-            limit=req.limit,
-            on_progress=on_progress,
-        )
-        results = engine.scrape()
-        with jobs_lock:
-            jobs[job_id]["status"] = "done"
-            jobs[job_id]["results"] = results
-            jobs[job_id]["progress"] = 100
-            jobs[job_id]["messages"].append(f"Concluido! {len(results)} registros coletados.")
+        try:
+            engine = ScraperEngine(
+                search_query=req.query,
+                limit=req.limit,
+                on_progress=on_progress,
+            )
+            results = engine.scrape()
+            with jobs_lock:
+                jobs[job_id]["status"] = "done"
+                jobs[job_id]["results"] = results
+                jobs[job_id]["progress"] = 100
+                jobs[job_id]["messages"].append(f"Concluido! {len(results)} registros coletados.")
+        except Exception as e:
+            with jobs_lock:
+                jobs[job_id]["status"] = "done"
+                jobs[job_id]["results"] = []
+                jobs[job_id]["progress"] = 100
+                jobs[job_id]["messages"].append(f"Erro no scraper: {str(e)}")
 
     thread = threading.Thread(target=run_scraper, daemon=True)
     thread.start()

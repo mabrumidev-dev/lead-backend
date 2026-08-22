@@ -579,7 +579,7 @@ class ScraperEngine:
         try:
             if not self.page:
                 return
-            png = self.page.screenshot()
+            png = self.page.screenshot(type="jpeg", quality=40)
             b64 = base64.b64encode(png).decode("utf-8")
             self.on_progress("", -2, b64)
         except Exception:
@@ -739,6 +739,10 @@ class ScraperEngine:
                         "--disable-dev-shm-usage",
                         "--disable-blink-features=AutomationControlled",
                         "--disable-gpu",
+                        "--disable-extensions",
+                        "--disable-background-networking",
+                        "--disable-background-timer-throttling",
+                        "--js-flags=--max-old-space-size=128",
                     ],
                 )
             except Exception as e:
@@ -793,7 +797,7 @@ class ScraperEngine:
                 scroll_count += 1
                 self._msg(f"Rolando resultados... ({scroll_count})", min(15 + scroll_count, 40))
 
-                if scroll_count % 5 == 0:
+                if scroll_count % 10 == 0:
                     self._screenshot()
 
                 new_height = self.page.evaluate(
