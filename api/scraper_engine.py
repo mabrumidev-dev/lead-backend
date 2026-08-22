@@ -843,16 +843,13 @@ class ScraperEngine:
             self._msg(f"Encontrados {len(allResultsLinks)} resultados. Coletando{f' (limite: {self.limit})' if self.limit > 0 else ''}...", 45)
 
             try:
-                context.close()
-                self.browser.close()
+                self.page.goto("about:blank")
             except Exception:
                 pass
-            self.browser = None
-            self.page = None
 
             for i in range(total_links):
                 if self._cancelled:
-                    return final_data
+                    break
 
                 if self.limit > 0 and len(final_data) >= self.limit:
                     self._msg(f"Limite de {self.limit} leads atingido!", 100)
@@ -862,35 +859,6 @@ class ScraperEngine:
                 self._msg(f"Coletando {i + 1}/{total_links}... ({len(final_data)} validos)", progress)
 
                 resultLink = allResultsLinks[i]
-                fresh_context = None
-
-                try:
-                    self.browser = self._pw.chromium.launch(
-                        headless=True,
-                        args=[
-                            "--no-sandbox",
-                            "--disable-dev-shm-usage",
-                            "--disable-blink-features=AutomationControlled",
-                            "--disable-gpu",
-                            "--disable-extensions",
-                            "--disable-background-networking",
-                            "--disable-default-apps",
-                            "--disable-sync",
-                            "--disable-translate",
-                            "--no-first-run",
-                            "--mute-audio",
-                            "--js-flags=--max-old-space-size=64",
-                        ],
-                    )
-                    fresh_context = self.browser.new_context(
-                        viewport={"width": 800, "height": 600},
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    )
-                    fresh_context.route("**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}", lambda route: route.abort())
-                    self.page = fresh_context.new_page()
-                except Exception as e:
-                    self._msg(f"Erro ao criar navegador: {str(e)}", progress)
-                    continue
 
                 try:
                     if not self._opening_url(resultLink):
@@ -905,15 +873,14 @@ class ScraperEngine:
                             self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
                 except Exception as e:
                     self._msg(f"Erro no lead {i + 1}: {str(e)}", progress)
-                finally:
-                    try:
-                        self.page = None
-                        if fresh_context:
-                            fresh_context.close()
-                        self.browser.close()
-                        self.browser = None
-                    except Exception:
-                        pass
+
+                try:
+                    self.page.evaluate("() => { document.body.innerHTML = ''; }")
+                    self.page.goto("about:blank")
+                except Exception:
+                    pass
+                import gc
+                gc.collect()
 
             self._msg(f"Concluido! {len(final_data)} registros coletados.", 100)
 
