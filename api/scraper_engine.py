@@ -585,8 +585,9 @@ class ScraperEngine:
         except Exception:
             pass
 
-    def _opening_url(self, url: str):
-        while True:
+    def _opening_url(self, url: str, max_retries: int = 3):
+        retries = 0
+        while retries < max_retries:
             if self._cancelled:
                 if self.browser:
                     try:
@@ -597,18 +598,21 @@ class ScraperEngine:
             try:
                 self.page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
             except PlaywrightTimeout:
-                sleep(5)
+                retries += 1
+                sleep(3)
                 continue
             except Exception:
-                sleep(5)
+                retries += 1
+                sleep(3)
                 continue
             else:
-                break
-        return True
+                return True
+        self._msg(f"Falha ao abrir pagina apos {max_retries} tentativas", -1)
+        return False
 
     def _parsing(self) -> Optional[dict]:
         try:
-            sleep(2)
+            sleep(3)
             self._screenshot()
 
             for _ in range(15):
@@ -741,8 +745,7 @@ class ScraperEngine:
                         "--disable-gpu",
                         "--disable-extensions",
                         "--disable-background-networking",
-                        "--disable-background-timer-throttling",
-                        "--js-flags=--max-old-space-size=128",
+                        "--js-flags=--max-old-space-size=256",
                     ],
                 )
             except Exception as e:
@@ -847,21 +850,19 @@ class ScraperEngine:
                 try:
                     resultLink = allResultsLinks[i]
                     if not self._opening_url(resultLink):
+                        self._msg(f"Pulando {i + 1}/{total_links} (falha ao abrir)", progress)
                         continue
                 except Exception as e:
-                    self._msg(f"Erro: {str(e)}", -1)
-                    try:
-                        if self.browser:
-                            self.browser.close()
-                    except Exception:
-                        pass
-                    return []
+                    self._msg(f"Erro no lead {i + 1}: {str(e)}", progress)
+                    continue
 
                 sleep(random.uniform(2, 4))
                 data = self._parsing()
                 if data:
                     data["Link"] = allResultsLinks[i]
                     final_data.append(data)
+                else:
+                    self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
 
             self._msg(f"Concluido! {len(final_data)} registros coletados.", 100)
             self._screenshot()
