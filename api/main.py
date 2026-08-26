@@ -183,4 +183,12 @@ if os.path.isdir(DIST_DIR):
     async def serve_spa(full_path: str):
         file_path = os.path.join(DIST_DIR, full_path)
         if os.path.isfile(file_path): return FileResponse(file_path)
-        return FileResponse(os.path.join(DIST_DIR, "index.html"))
+        html_path = os.path.join(DIST_DIR, "index.html")
+        with open(html_path, "r") as f:
+            html = f.read()
+        supabase_url = os.environ.get("VITE_SUPABASE_URL", "")
+        supabase_key = os.environ.get("VITE_SUPABASE_ANON_KEY", "")
+        api_url = os.environ.get("VITE_API_URL", "")
+        config_script = f"<script>window.__SUPABASE_CONFIG__={{url:'{supabase_url}',anonKey:'{supabase_key}'}};window.__API_URL__='{api_url}';</script>"
+        html = html.replace("<head>", f"<head>{config_script}", 1)
+        return HTMLResponse(content=html)
