@@ -21,20 +21,40 @@ except ImportError:
     PlaywrightTimeout = Exception
 
 
+def _is_valid_cnpj(cnpj_digits: str) -> bool:
+    """Validate CNPJ using check digit algorithm."""
+    if len(cnpj_digits) != 14 or not cnpj_digits.isdigit():
+        return False
+    if cnpj_digits == cnpj_digits[0] * 14:
+        return False
+    weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    sum1 = sum(int(cnpj_digits[i]) * weights1[i] for i in range(12))
+    d1 = 11 - (sum1 % 11)
+    d1 = 0 if d1 > 9 else d1
+    sum2 = sum(int(cnpj_digits[i]) * weights2[i] for i in range(13))
+    d2 = 11 - (sum2 % 11)
+    d2 = 0 if d2 > 9 else d2
+    return int(cnpj_digits[12]) == d1 and int(cnpj_digits[13]) == d2
+
+
+def _extract_valid_cnpj(text: str) -> Optional[str]:
+    """Extract a valid CNPJ from text using check digit validation."""
+    formatted = re.findall(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', text)
+    for match in formatted:
+        digits = re.sub(r'\D', '', match)
+        if _is_valid_cnpj(digits):
+            return digits
+    raw = re.findall(r'(?<!\d)(\d{14})(?!\d)', text)
+    for match in raw:
+        if _is_valid_cnpj(match):
+            return match
+    return None
+
+
 def _extract_cnpj_from_html(html: str) -> Optional[str]:
     """Extract a valid CNPJ from HTML content. Prefer formatted CNPJs."""
-    patterns = [
-        r'CNPJ[:\s]*(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})',
-        r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})',
-        r'CNPJ[:\s]*(\d{14})',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, html)
-        if match:
-            digits = re.sub(r'\D', '', match.group(1))
-            if len(digits) == 14 and not digits.startswith('00'):
-                return digits
-    return None
+    return _extract_valid_cnpj(html)
 
 
 def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
@@ -133,47 +153,57 @@ def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
 def _cnpj_from_website(url: str) -> Optional[str]:
     """Try to extract CNPJ from website main page and common subpages."""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    subpages = ["", "/contato", "/sobre", "/quem-somos"]
+    subpages = ["", "/contato", "/sobre", "/quem-somos", "/empresa", "/rodape", "/footer"]
     base = url.rstrip("/")
     for page in subpages:
         try:
-            resp = requests.get(f"{base}{page}", timeout=4, headers=headers, allow_redirects=True)
-            cnpj = _extract_cnpj_from_html(resp.text)
-            if cnpj:
-                return cnpj
+            resp = requests.get(f"{base}{page}", timeout=5, headers=headers, allow_redirects=True)
+            if resp.status_code == 200:
+                cnpj = _extract_valid_cnpj(resp.text)
+                if cnpj:
+                    return cnpj
         except Exception:
             continue
     return None
 
 
+def _cnpj_from_directories(business_name: str, city: str = "", phone: str = "") -> Optional[str]:
+    """Fast CNPJ lookup using directory sites."""
+    clean_name = _clean_business_name(business_name)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html",
+    }
+
+    search_terms = []
+    if clean_name:
+        search_terms.append(clean_name)
+    if phone:
+        phone_clean = re.sub(r'\D', '', phone)
+        if len(phone_clean) >= 10:
+            search_terms.append(phone_clean[:11])
+
+    for term in search_terms:
+        try:
+            resp = requests.get(
+                f"https://casadosdados.com.br/solucao/cnpj/pesquisa-avancada?q={requests.utils.quote(term)}&municipio={city}&uf=Todos",
+                timeout=8, headers=headers
+            )
+            if resp.status_code == 200:
+                cnpj = _extract_valid_cnpj(resp.text)
+                if cnpj:
+                    return cnpj
+        except Exception:
+            pass
+
+    return None
+
+
 def _cnpj_from_google(business_name: str, city: str = "", phone: str = "") -> Optional[str]:
-    """Search multiple engines with multiple query strategies for the business CNPJ."""
+    """Search multiple engines for the business CNPJ. Uses validated CNPJ extraction."""
     clean_name = _clean_business_name(business_name)
     if not clean_name:
         return None
-
-    state_map = {
-        'rio de janeiro': 'RJ', 'sao paulo': 'SP', 'brasilia': 'DF', 'brasília': 'DF',
-        'belo horizonte': 'MG', 'curitiba': 'PR', 'porto alegre': 'RS', 'salvador': 'BA',
-        'fortaleza': 'CE', 'recife': 'PE', 'manaus': 'AM', 'goiania': 'GO', 'goiânia': 'GO',
-        'campinas': 'SP', 'florianopolis': 'SC', 'florianópolis': 'SC', 'joinville': 'SC',
-        'bh': 'MG', 'rj': 'RJ', 'sp': 'SP', 'df': 'DF', 'pr': 'PR', 'rs': 'RS',
-    }
-    state_abbr = ""
-    city_lower = (city or "").lower()
-    for key, val in state_map.items():
-        if key in city_lower:
-            state_abbr = val
-            break
-
-    queries = [
-        f"{clean_name} {city} cnpj",
-        f"{clean_name} cnpj",
-        f"{clean_name} {state_abbr} cnpj" if state_abbr else None,
-        f"{clean_name} {city}",
-        f'"{clean_name}" cnpj',
-    ]
-    queries = [q for q in queries if q]
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -181,7 +211,12 @@ def _cnpj_from_google(business_name: str, city: str = "", phone: str = "") -> Op
         "Accept-Language": "pt-BR,pt;q=0.9",
     }
 
-    # Bing first (most reliable), then Yahoo, then DuckDuckGo
+    queries = [
+        f"{clean_name} {city} cnpj",
+        f"{clean_name} cnpj",
+        f'"{clean_name}" cnpj',
+    ]
+
     engines = [
         "https://www.bing.com/search?q={q}",
         "https://search.yahoo.com/search?p={q}",
@@ -191,34 +226,32 @@ def _cnpj_from_google(business_name: str, city: str = "", phone: str = "") -> Op
     for query in queries:
         for engine_tpl in engines:
             try:
-                url = engine_tpl.format(q=requests.utils.quote(query))
-                resp = requests.get(url, timeout=10, headers=headers)
+                resp = requests.get(
+                    engine_tpl.format(q=requests.utils.quote(query)),
+                    timeout=5, headers=headers
+                )
                 if resp.status_code == 200:
-                    cnpj = _extract_cnpj_from_html(resp.text)
+                    cnpj = _extract_valid_cnpj(resp.text)
                     if cnpj:
                         return cnpj
             except Exception:
                 continue
 
-    # Fallback: search by phone number on CNPJ directories
     if phone:
         phone_clean = re.sub(r'\D', '', phone)
         if len(phone_clean) >= 10:
-            phone_queries = [
-                f'"{phone_clean[:11]}" cnpj',
-                f'"{phone_clean[:10]}" cnpj',
-            ]
-            for pq in phone_queries:
-                for engine_tpl in engines:
-                    try:
-                        url = engine_tpl.format(q=requests.utils.quote(pq))
-                        resp = requests.get(url, timeout=10, headers=headers)
-                        if resp.status_code == 200:
-                            cnpj = _extract_cnpj_from_html(resp.text)
-                            if cnpj:
-                                return cnpj
-                    except Exception:
-                        continue
+            for engine_tpl in engines:
+                try:
+                    resp = requests.get(
+                        engine_tpl.format(q=requests.utils.quote(phone_clean[:11] + " cnpj")),
+                        timeout=5, headers=headers
+                    )
+                    if resp.status_code == 200:
+                        cnpj = _extract_valid_cnpj(resp.text)
+                        if cnpj:
+                            return cnpj
+                except Exception:
+                    continue
 
     return None
 
@@ -251,95 +284,27 @@ def _is_useful_website(url: str) -> bool:
     return lower.startswith('http')
 
 
-def _cnpj_from_directory(business_name: str, city: str = "", phone: str = "") -> Optional[str]:
-    """Search CNPJ directory sites (casadosdados, cnpj.biz, econodata) by company name."""
-    clean_name = _clean_business_name(business_name)
-    if not clean_name:
-        return None
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/json",
-        "Accept-Language": "pt-BR,pt;q=0.9",
-    }
-
-    try:
-        query = requests.utils.quote(clean_name)
-        resp = requests.get(
-            f"https://casadosdados.com.br/solucao/cnpj/pesquisa-avancada?q={query}&municipio={city}&uf=Todos",
-            timeout=10, headers=headers
-        )
-        if resp.status_code == 200:
-            cnpj = _extract_cnpj_from_html(resp.text)
-            if cnpj:
-                return cnpj
-    except Exception:
-        pass
-
-    try:
-        resp = requests.get(
-            f"https://cnpj.biz/api?q={clean_name}",
-            timeout=10, headers=headers
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, dict):
-                results = data.get("data", [])
-                if results and len(results) > 0:
-                    cnpj = results[0].get("cnpj", "")
-                    if cnpj and len(cnpj) == 14:
-                        return cnpj
-            elif isinstance(data, list) and len(data) > 0:
-                cnpj = data[0].get("cnpj", "")
-                if cnpj and len(cnpj) == 14:
-                    return cnpj
-    except Exception:
-        pass
-
-    # Fallback: search by phone on directories
-    if phone:
-        phone_clean = re.sub(r'\D', '', phone)
-        if len(phone_clean) >= 10:
-            try:
-                resp = requests.get(
-                    f"https://cnpj.biz/api?q={phone_clean[:11]}",
-                    timeout=10, headers=headers
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if isinstance(data, dict):
-                        results = data.get("data", [])
-                        if results and len(results) > 0:
-                            cnpj = results[0].get("cnpj", "")
-                            if cnpj and len(cnpj) == 14:
-                                return cnpj
-                    elif isinstance(data, list) and len(data) > 0:
-                        cnpj = data[0].get("cnpj", "")
-                        if cnpj and len(cnpj) == 14:
-                            return cnpj
-            except Exception:
-                pass
-
-    return None
-
-
 def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone: str = "") -> Optional[dict]:
     """Try to find CNPJ using multiple strategies, then look up full data via Minha Receita."""
+    import time
+    start = time.time()
+    MAX_TIME = 25  # seconds max for entire lookup
+
     try:
         cnpj = None
 
-        if _is_useful_website(website_url):
+        if _is_useful_website(website_url) and (time.time() - start) < MAX_TIME:
             cnpj = _cnpj_from_website(website_url)
 
         clean_name = _clean_business_name(business_name)
 
-        if not cnpj and clean_name:
+        if not cnpj and clean_name and (time.time() - start) < MAX_TIME:
+            cnpj = _cnpj_from_directories(clean_name, city, phone)
+
+        if not cnpj and clean_name and (time.time() - start) < MAX_TIME:
             cnpj = _cnpj_from_google(clean_name, city, phone)
 
-        if not cnpj and clean_name:
-            cnpj = _cnpj_from_directory(clean_name, city, phone)
-
-        if cnpj:
+        if cnpj and (time.time() - start) < MAX_TIME:
             return _lookup_cnpj_api(cnpj)
 
     except Exception:
