@@ -239,6 +239,30 @@ def _cnpj_from_directories(business_name: str, city: str = "", phone: str = "") 
     return None
 
 
+def _cnpj_from_biz_translate(business_name: str, city: str = "") -> Optional[str]:
+    """Use Google Translate as proxy to scrape cnpj.biz search results for a CNPJ."""
+    clean_name = _clean_business_name(business_name)
+    if not clean_name:
+        return None
+    query = f"{clean_name} {city}".strip() if city else clean_name
+    target_url = f"https://cnpj.biz/procura/{requests.utils.quote(query)}"
+    gt_url = f"https://translate.google.com/translate?sl=pt&tl=en&u={requests.utils.quote(target_url)}"
+    try:
+        resp = requests.get(gt_url, timeout=15, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html",
+        })
+        if resp.status_code == 200:
+            cnpujs = re.findall(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', resp.text)
+            for raw in cnpujs:
+                cnpj = re.sub(r'\D', '', raw)
+                if _is_valid_cnpj(cnpj):
+                    return cnpj
+    except Exception:
+        pass
+    return None
+
+
 def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone: str = "") -> Optional[dict]:
     """Find CNPJ using parallel strategies, then lookup on Minha Receita."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -266,6 +290,12 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                             break
                     except Exception:
                         continue
+
+    # Strategy 3: cnpj.biz via Google Translate proxy (bypasses IP blocks)
+    if not cnpj:
+        clean_name = _clean_business_name(business_name)
+        if clean_name:
+            cnpj = _cnpj_from_biz_translate(clean_name, city)
 
     if cnpj:
         return _lookup_cnpj_api(cnpj)
