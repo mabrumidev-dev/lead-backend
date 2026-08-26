@@ -191,7 +191,7 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
       if (!lead.Responsavel) {
         setEnrichProgress(`${i + 1}/${selectedArr.length}: Buscando dados de ${lead.Name}...`)
         try {
-          const data = await enrichLead(lead.Website || '', lead.Name, extractCity(lead.Address))
+          const data = await enrichLead(lead.Website || '', lead.Name, extractCity(lead.Address), lead.Phone || '')
           updated[idx] = { ...lead, ...data }
           newEnriched.add(lead.Name)
           if (data.Responsavel || data.CNPJ) enriched++
@@ -602,7 +602,7 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
                             setEnriching(true)
                             setEnrichProgress(`Re-buscando: ${r.Name}...`)
                             try {
-                              const data = await enrichLead(r.Website || '', r.Name, extractCity(r.Address))
+                              const data = await enrichLead(r.Website || '', r.Name, extractCity(r.Address), r.Phone || '')
                               const updated = [...displayResults]
                               updated[idx] = { ...r, ...data }
                               setSavedResults(updated)
@@ -628,7 +628,7 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
                             const lead = updated[idx]
                             if (!lead.Responsavel) {
                               try {
-                                const data = await enrichLead(lead.Website || '', lead.Name, extractCity(lead.Address))
+                                const data = await enrichLead(lead.Website || '', lead.Name, extractCity(lead.Address), lead.Phone || '')
                                 updated[idx] = { ...lead, ...data }
                               } catch {}
                             }

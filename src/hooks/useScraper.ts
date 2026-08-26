@@ -184,12 +184,12 @@ export function useScraper() {
     }
   }, [])
 
-  const enrichLead = useCallback(async (website: string, name?: string, city?: string): Promise<Partial<ScrapedLead>> => {
+  const enrichLead = useCallback(async (website: string, name?: string, city?: string, phone?: string): Promise<Partial<ScrapedLead>> => {
     try {
       const res = await fetch(`${API_BASE}/api/enrich`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ website, name: name || '', city: city || '' }),
+        body: JSON.stringify({ website, name: name || '', city: city || '', phone: phone || '' }),
       })
       if (!res.ok) return {}
       const d = await res.json()

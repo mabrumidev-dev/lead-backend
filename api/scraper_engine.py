@@ -40,79 +40,91 @@ def _extract_cnpj_from_html(html: str) -> Optional[str]:
 def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
     """Look up CNPJ via Minha Receita (free, fast) — extracts ALL available data."""
     formatted = f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
+    api_resp = None
+    for attempt in range(3):
+        try:
+            api_resp = requests.get(
+                f"https://minhareceita.org/{formatted}",
+                timeout=15,
+                headers={"User-Agent": "MabrumiCRM/1.0"},
+            )
+            if api_resp.status_code == 200:
+                break
+            if api_resp.status_code == 429:
+                sleep(2)
+                continue
+        except requests.exceptions.RequestException:
+            sleep(2)
+            continue
+    if not api_resp or api_resp.status_code != 200:
+        return None
     try:
-        api_resp = requests.get(
-            f"https://minhareceita.org/{formatted}",
-            timeout=10,
-            headers={"User-Agent": "MabrumiCRM/1.0"},
-        )
-        if api_resp.status_code == 200:
-            d = api_resp.json()
-            qsa = d.get("qsa", [])
-            owners = [p.get("nome_socio", "") for p in qsa if p.get("nome_socio")]
-            admins = [
-                {
-                    "nome": p.get("nome_socio", ""),
-                    "qualificacao": p.get("qualificacao_socio", ""),
-                    "entrada": p.get("data_entrada_sociedade", ""),
-                    "faixa_etaria": p.get("faixa_etaria", ""),
-                    "representante_legal": p.get("nome_representante_legal", ""),
-                    "rep_qualificacao": p.get("qualificacao_representante_legal", ""),
-                }
-                for p in qsa
-            ]
-            cnaes_sec = d.get("cnaes_secundarios", [])
-            regime = d.get("regime_tributario", [])
-
-            endereco = " ".join(filter(None, [
-                d.get("descricao_tipo_de_logradouro", ""),
-                d.get("logradouro", ""),
-                d.get("numero", ""),
-                d.get("complemento", ""),
-                d.get("bairro", ""),
-            ]))
-
-            return {
-                "cnpj": d.get("cnpj", ""),
-                "razao_social": d.get("razao_social", ""),
-                "nome_fantasia": d.get("nome_fantasia", ""),
-                "situacao_cadastral": d.get("descricao_situacao_cadastral", ""),
-                "motivo_situacao": d.get("descricao_motivo_situacao_cadastral", ""),
-                "data_situacao_cadastral": d.get("data_situacao_cadastral", ""),
-                "natureza_juridica": d.get("natureza_juridica", ""),
-                "porte": d.get("porte", ""),
-                "capital_social": d.get("capital_social", ""),
-                "atividade_principal": d.get("cnae_fiscal_descricao", ""),
-                "cnae_fiscal": d.get("cnae_fiscal", ""),
-                "cnaes_secundarios": [
-                    f"{c.get('descricao', '')} ({c.get('codigo', '')})"
-                    for c in cnaes_sec
-                ],
-                "opcao_simples": d.get("opcao_pelo_simples"),
-                "opcao_mei": d.get("opcao_pelo_mei"),
-                "regime_tributario": [
-                    f"{r.get('forma_de_tributacao', '')} ({r.get('ano', '')})"
-                    for r in regime
-                ],
-                "situacao_especial": d.get("situacao_especial", ""),
-                "data_inicio_atividade": d.get("data_inicio_atividade", ""),
-                "data_opcao_simples": d.get("data_opcao_pelo_simples", ""),
-                "identificador_matriz_filial": "Matriz" if d.get("identificador_matriz_filial") == 1 else "Filial",
-                "cep": d.get("cep", ""),
-                "uf": d.get("uf", ""),
-                "municipio": d.get("municipio", ""),
-                "bairro": d.get("bairro", ""),
-                "endereco_completo": endereco,
-                "telefone_1": d.get("ddd_telefone_1", ""),
-                "telefone_2": d.get("ddd_telefone_2", ""),
-                "fax": d.get("ddd_fax", ""),
-                "email": d.get("email", ""),
-                "responsavel": owners[0] if owners else "",
-                "socios": ", ".join(owners),
-                "qsa": admins,
-                "entidade_federativa": d.get("ente_federativo_responsavel", ""),
-                "codigo_municipio_ibge": d.get("codigo_municipio_ibge", ""),
+        d = api_resp.json()
+        qsa = d.get("qsa", [])
+        owners = [p.get("nome_socio", "") for p in qsa if p.get("nome_socio")]
+        admins = [
+            {
+                "nome": p.get("nome_socio", ""),
+                "qualificacao": p.get("qualificacao_socio", ""),
+                "entrada": p.get("data_entrada_sociedade", ""),
+                "faixa_etaria": p.get("faixa_etaria", ""),
+                "representante_legal": p.get("nome_representante_legal", ""),
+                "rep_qualificacao": p.get("qualificacao_representante_legal", ""),
             }
+            for p in qsa
+        ]
+        cnaes_sec = d.get("cnaes_secundarios", [])
+        regime = d.get("regime_tributario", [])
+
+        endereco = " ".join(filter(None, [
+            d.get("descricao_tipo_de_logradouro", ""),
+            d.get("logradouro", ""),
+            d.get("numero", ""),
+            d.get("complemento", ""),
+            d.get("bairro", ""),
+        ]))
+
+        return {
+            "cnpj": d.get("cnpj", ""),
+            "razao_social": d.get("razao_social", ""),
+            "nome_fantasia": d.get("nome_fantasia", ""),
+            "situacao_cadastral": d.get("descricao_situacao_cadastral", ""),
+            "motivo_situacao": d.get("descricao_motivo_situacao_cadastral", ""),
+            "data_situacao_cadastral": d.get("data_situacao_cadastral", ""),
+            "natureza_juridica": d.get("natureza_juridica", ""),
+            "porte": d.get("porte", ""),
+            "capital_social": d.get("capital_social", ""),
+            "atividade_principal": d.get("cnae_fiscal_descricao", ""),
+            "cnae_fiscal": d.get("cnae_fiscal", ""),
+            "cnaes_secundarios": [
+                f"{c.get('descricao', '')} ({c.get('codigo', '')})"
+                for c in cnaes_sec
+            ],
+            "opcao_simples": d.get("opcao_pelo_simples"),
+            "opcao_mei": d.get("opcao_pelo_mei"),
+            "regime_tributario": [
+                f"{r.get('forma_de_tributacao', '')} ({r.get('ano', '')})"
+                for r in regime
+            ],
+            "situacao_especial": d.get("situacao_especial", ""),
+            "data_inicio_atividade": d.get("data_inicio_atividade", ""),
+            "data_opcao_simples": d.get("data_opcao_pelo_simples", ""),
+            "identificador_matriz_filial": "Matriz" if d.get("identificador_matriz_filial") == 1 else "Filial",
+            "cep": d.get("cep", ""),
+            "uf": d.get("uf", ""),
+            "municipio": d.get("municipio", ""),
+            "bairro": d.get("bairro", ""),
+            "endereco_completo": endereco,
+            "telefone_1": d.get("ddd_telefone_1", ""),
+            "telefone_2": d.get("ddd_telefone_2", ""),
+            "fax": d.get("ddd_fax", ""),
+            "email": d.get("email", ""),
+            "responsavel": owners[0] if owners else "",
+            "socios": ", ".join(owners),
+            "qsa": admins,
+            "entidade_federativa": d.get("ente_federativo_responsavel", ""),
+            "codigo_municipio_ibge": d.get("codigo_municipio_ibge", ""),
+        }
     except Exception:
         pass
     return None
@@ -134,7 +146,7 @@ def _cnpj_from_website(url: str) -> Optional[str]:
     return None
 
 
-def _cnpj_from_google(business_name: str, city: str = "") -> Optional[str]:
+def _cnpj_from_google(business_name: str, city: str = "", phone: str = "") -> Optional[str]:
     """Search multiple engines with multiple query strategies for the business CNPJ."""
     clean_name = _clean_business_name(business_name)
     if not clean_name:
@@ -169,7 +181,9 @@ def _cnpj_from_google(business_name: str, city: str = "") -> Optional[str]:
         "Accept-Language": "pt-BR,pt;q=0.9",
     }
 
+    # Bing first (most reliable), then Yahoo, then DuckDuckGo
     engines = [
+        "https://www.bing.com/search?q={q}",
         "https://search.yahoo.com/search?p={q}",
         "https://html.duckduckgo.com/html/?q={q}",
     ]
@@ -177,14 +191,34 @@ def _cnpj_from_google(business_name: str, city: str = "") -> Optional[str]:
     for query in queries:
         for engine_tpl in engines:
             try:
-                url = engine_tpl.format(q=query.replace(" ", "+"))
-                resp = requests.get(url, timeout=8, headers=headers)
+                url = engine_tpl.format(q=requests.utils.quote(query))
+                resp = requests.get(url, timeout=10, headers=headers)
                 if resp.status_code == 200:
                     cnpj = _extract_cnpj_from_html(resp.text)
                     if cnpj:
                         return cnpj
             except Exception:
                 continue
+
+    # Fallback: search by phone number on CNPJ directories
+    if phone:
+        phone_clean = re.sub(r'\D', '', phone)
+        if len(phone_clean) >= 10:
+            phone_queries = [
+                f'"{phone_clean[:11]}" cnpj',
+                f'"{phone_clean[:10]}" cnpj',
+            ]
+            for pq in phone_queries:
+                for engine_tpl in engines:
+                    try:
+                        url = engine_tpl.format(q=requests.utils.quote(pq))
+                        resp = requests.get(url, timeout=10, headers=headers)
+                        if resp.status_code == 200:
+                            cnpj = _extract_cnpj_from_html(resp.text)
+                            if cnpj:
+                                return cnpj
+                    except Exception:
+                        continue
 
     return None
 
@@ -217,7 +251,7 @@ def _is_useful_website(url: str) -> bool:
     return lower.startswith('http')
 
 
-def _cnpj_from_directory(business_name: str, city: str = "") -> Optional[str]:
+def _cnpj_from_directory(business_name: str, city: str = "", phone: str = "") -> Optional[str]:
     """Search CNPJ directory sites (casadosdados, cnpj.biz, econodata) by company name."""
     clean_name = _clean_business_name(business_name)
     if not clean_name:
@@ -262,10 +296,34 @@ def _cnpj_from_directory(business_name: str, city: str = "") -> Optional[str]:
     except Exception:
         pass
 
+    # Fallback: search by phone on directories
+    if phone:
+        phone_clean = re.sub(r'\D', '', phone)
+        if len(phone_clean) >= 10:
+            try:
+                resp = requests.get(
+                    f"https://cnpj.biz/api?q={phone_clean[:11]}",
+                    timeout=10, headers=headers
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, dict):
+                        results = data.get("data", [])
+                        if results and len(results) > 0:
+                            cnpj = results[0].get("cnpj", "")
+                            if cnpj and len(cnpj) == 14:
+                                return cnpj
+                    elif isinstance(data, list) and len(data) > 0:
+                        cnpj = data[0].get("cnpj", "")
+                        if cnpj and len(cnpj) == 14:
+                            return cnpj
+            except Exception:
+                pass
+
     return None
 
 
-def lookup_cnpj(website_url: str, business_name: str = "", city: str = "") -> Optional[dict]:
+def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone: str = "") -> Optional[dict]:
     """Try to find CNPJ using multiple strategies, then look up full data via Minha Receita."""
     try:
         cnpj = None
@@ -276,10 +334,10 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "") -> Op
         clean_name = _clean_business_name(business_name)
 
         if not cnpj and clean_name:
-            cnpj = _cnpj_from_google(clean_name, city)
+            cnpj = _cnpj_from_google(clean_name, city, phone)
 
         if not cnpj and clean_name:
-            cnpj = _cnpj_from_directory(clean_name, city)
+            cnpj = _cnpj_from_directory(clean_name, city, phone)
 
         if cnpj:
             return _lookup_cnpj_api(cnpj)
