@@ -186,13 +186,20 @@ export function useScraper() {
 
   const enrichLead = useCallback(async (website: string, name?: string, city?: string, phone?: string): Promise<Partial<ScrapedLead>> => {
     try {
+      console.log('[ENRICH] Calling:', `${API_BASE}/api/enrich`, { website, name, city, phone })
       const res = await fetch(`${API_BASE}/api/enrich`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ website, name: name || '', city: city || '', phone: phone || '' }),
       })
-      if (!res.ok) return {}
+      console.log('[ENRICH] Response status:', res.status)
+      if (!res.ok) {
+        const errText = await res.text()
+        console.error('[ENRICH] Error response:', errText)
+        return {}
+      }
       const d = await res.json()
+      console.log('[ENRICH] Response data:', d)
       return {
         Responsavel: d.responsavel || '',
         Socios: d.socios || '',

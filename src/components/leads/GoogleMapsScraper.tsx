@@ -191,11 +191,14 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
       if (!lead.Responsavel) {
         setEnrichProgress(`${i + 1}/${selectedArr.length}: Buscando dados de ${lead.Name}...`)
         try {
+          console.log('[ENRICH-UI] Enriching lead:', lead.Name, 'website:', lead.Website, 'phone:', lead.Phone)
           const data = await enrichLead(lead.Website || '', lead.Name, extractCity(lead.Address), lead.Phone || '')
+          console.log('[ENRICH-UI] Result for', lead.Name, ':', data)
           updated[idx] = { ...lead, ...data }
           newEnriched.add(lead.Name)
           if (data.Responsavel || data.CNPJ) enriched++
-        } catch {
+        } catch (err) {
+          console.error('[ENRICH-UI] Error enriching', lead.Name, err)
           newEnriched.add(lead.Name)
         }
       }

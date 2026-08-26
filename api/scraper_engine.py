@@ -61,11 +61,11 @@ def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
     """Look up CNPJ via Minha Receita (free, fast) — extracts ALL available data."""
     formatted = f"{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:14]}"
     api_resp = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             api_resp = requests.get(
                 f"https://minhareceita.org/{formatted}",
-                timeout=15,
+                timeout=8,
                 headers={"User-Agent": "MabrumiCRM/1.0"},
             )
             if api_resp.status_code == 200:
@@ -74,7 +74,7 @@ def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
                 sleep(2)
                 continue
         except requests.exceptions.RequestException:
-            sleep(2)
+            sleep(1)
             continue
     if not api_resp or api_resp.status_code != 200:
         return None
@@ -181,11 +181,11 @@ def _is_useful_website(url: str) -> bool:
 def _cnpj_from_website(url: str) -> Optional[str]:
     """Try to extract CNPJ from website main page and common subpages."""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    subpages = ["", "/contato", "/sobre", "/quem-somos", "/empresa", "/rodape", "/footer"]
+    subpages = ["", "/contato", "/sobre", "/quem-somos", "/rodape"]
     base = url.rstrip("/")
     for page in subpages:
         try:
-            resp = requests.get(f"{base}{page}", timeout=5, headers=headers, allow_redirects=True)
+            resp = requests.get(f"{base}{page}", timeout=4, headers=headers, allow_redirects=True)
             if resp.status_code == 200:
                 cnpj = _extract_valid_cnpj(resp.text)
                 if cnpj:
@@ -265,18 +265,24 @@ def _cnpj_from_biz_translate(business_name: str, city: str = "") -> Optional[str
 
 def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone: str = "") -> Optional[dict]:
     """Find CNPJ using parallel strategies, then lookup on Minha Receita."""
+    import logging
     from concurrent.futures import ThreadPoolExecutor, as_completed
+    log = logging.getLogger("lookup_cnpj")
+    log.warning(f"[CNPJ] lookup_cnpj called: website={website_url} name={business_name} city={city}")
 
     cnpj = None
 
     # Strategy 1: Website scraping (fastest, most reliable)
     if _is_useful_website(website_url):
+        log.warning("[CNPJ] Strategy 1: website scraping...")
         cnpj = _cnpj_from_website(website_url)
+        log.warning(f"[CNPJ] Strategy 1 result: {cnpj}")
 
     # Strategy 2: Parallel search (Bing + directories) - max 10s
     if not cnpj:
         clean_name = _clean_business_name(business_name)
         if clean_name:
+            log.warning("[CNPJ] Strategy 2: Bing + directories...")
             with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {
                     executor.submit(_cnpj_from_bing, clean_name, city): "bing",
@@ -287,6 +293,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                         result = future.result()
                         if result:
                             cnpj = result
+                            log.warning(f"[CNPJ] Strategy 2 found: {cnpj}")
                             break
                     except Exception:
                         continue
@@ -295,10 +302,14 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
     if not cnpj:
         clean_name = _clean_business_name(business_name)
         if clean_name:
+            log.warning("[CNPJ] Strategy 3: Google Translate proxy...")
             cnpj = _cnpj_from_biz_translate(clean_name, city)
+            log.warning(f"[CNPJ] Strategy 3 result: {cnpj}")
 
     if cnpj:
+        log.warning(f"[CNPJ] Found CNPJ {cnpj}, calling Minha Receita API...")
         return _lookup_cnpj_api(cnpj)
+    log.warning("[CNPJ] All strategies failed, returning None")
     return None
 
 
