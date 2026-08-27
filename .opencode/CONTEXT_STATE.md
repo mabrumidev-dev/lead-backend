@@ -1,5 +1,10 @@
 # Context State - 27/08/2026 - 19:30
 
+## COMANDO PARA NOVA SESSÃO
+```
+Leia .opencode/CONTEXT_STATE.md e continue de onde paramos
+```
+
 ## MAPA COMPLETO DO PROJETO
 
 ### ARQUITETURA GERAL
