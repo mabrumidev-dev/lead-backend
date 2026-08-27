@@ -700,6 +700,9 @@ class ScraperEngine:
             sleep(3)
             self._screenshot()
 
+            current_url = self.page.url
+            log.warning(f"[PARSING] URL: {current_url}")
+
             for _ in range(15):
                 if self._cancelled:
                     return None
@@ -711,6 +714,20 @@ class ScraperEngine:
                 if found:
                     break
                 sleep(1)
+
+            h1_info = self.page.evaluate("""
+                () => {
+                    const h1s = document.querySelectorAll('h1');
+                    return Array.from(h1s).map(h => ({
+                        text: h.textContent.substring(0, 80),
+                        className: h.className,
+                        id: h.id
+                    }));
+                }
+            """)
+            log.warning(f"[PARSING] h1 elements found: {len(h1_info)}")
+            for h in h1_info[:3]:
+                log.warning(f"[PARSING] h1: class={h.get('className','')} text={h.get('text','')[:60]}")
 
             rating = totalReviews = address = websiteUrl = phone = None
 
@@ -745,6 +762,10 @@ class ScraperEngine:
                 log.warning(f"[PARSING] h1.DUwDvf nao encontrado. h1 tags: {len(h1_tags)}")
                 for h1 in h1_tags[:3]:
                     log.warning(f"[PARSING] h1 found: {h1.get_text(strip=True)[:50]}")
+                body_len = len(html) if html else 0
+                log.warning(f"[PARSING] HTML body length: {body_len}")
+                if html:
+                    log.warning(f"[PARSING] HTML preview: {html[:300]}")
                 try:
                     current_url = self.page.url
                     log.warning(f"[PARSING] Current URL: {current_url}")
@@ -953,8 +974,22 @@ class ScraperEngine:
             feed_html = self.page.evaluate(
                 "() => { const el = document.querySelector(\"[role='feed']\"); return el ? el.outerHTML : ''; }"
             )
+            log.warning(f"[SCRAPE] Feed HTML length: {len(feed_html)}")
+            if feed_html:
+                log.warning(f"[SCRAPE] Feed HTML preview: {feed_html[:500]}")
+
             allResultsListSoup = BeautifulSoup(feed_html, "html.parser")
             allResultsAnchorTags = allResultsListSoup.find_all("a", class_="hfpxzc")
+            log.warning(f"[SCRAPE] Links with class hfpxzc: {len(allResultsAnchorTags)}")
+
+            if len(allResultsAnchorTags) == 0:
+                all_anchors = allResultsListSoup.find_all("a")
+                log.warning(f"[SCRAPE] Total <a> tags in feed: {len(all_anchors)}")
+                for a in all_anchors[:5]:
+                    cls = a.get("class", [])
+                    href = a.get("href", "")[:80]
+                    log.warning(f"[SCRAPE]   <a class={' '.join(cls)} href={href}>")
+
             allResultsLinks = [a.get("href") for a in allResultsAnchorTags if a.get("href")]
 
             total_links = len(allResultsLinks)
