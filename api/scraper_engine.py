@@ -190,6 +190,12 @@ def _clean_business_name(raw_name: str, city: str = "") -> str:
     return name
 
 
+def _short_business_name(name: str) -> str:
+    """Extract the core business name. E.g. 'Sorris art centro odontologico' -> 'Sorris art'."""
+    words = name.split()
+    return ' '.join(words[:2]) if len(words) > 2 else name
+
+
 NON_WEBSITE_DOMAINS = [
     'wa.me', 'whatsapp', 'instagram', 'facebook', 'twitter', 'linkedin',
     'tiktok', 'youtube', 'pinterest', 'snapchat', 'linktr.ee',
@@ -334,6 +340,26 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
             log.warning("[CNPJ] Strategy 3: Google Translate proxy...")
             cnpj = _cnpj_from_biz_translate(clean_name, city)
             log.warning(f"[CNPJ] Strategy 3 result: {cnpj}")
+
+    # Strategy 4: Retry with short/core name (strips descriptors like "centro odontologico")
+    if not cnpj:
+        core_name = _short_business_name(_clean_business_name(business_name, city))
+        if core_name and core_name != _clean_business_name(business_name, city):
+            log.warning(f"[CNPJ] Strategy 4: retry with core name '{core_name}'...")
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = {
+                    executor.submit(_cnpj_from_bing, core_name, city): "bing",
+                    executor.submit(_cnpj_from_biz_translate, core_name, city): "biz",
+                }
+                for future in as_completed(futures, timeout=15):
+                    try:
+                        result = future.result()
+                        if result:
+                            cnpj = result
+                            log.warning(f"[CNPJ] Strategy 4 found: {cnpj}")
+                            break
+                    except Exception:
+                        continue
 
     if cnpj:
         log.warning(f"[CNPJ] Found CNPJ {cnpj}, calling Minha Receita API...")
