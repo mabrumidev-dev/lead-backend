@@ -138,9 +138,14 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
   const [enrichedNames, setEnrichedNames] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (job?.status === 'done' && job.results.length > 0) {
-      setSavedResults(job.results)
-      saveResults(job.results)
+    if (job?.status === 'done') {
+      if (job.results.length > 0) {
+        setSavedResults(job.results)
+        saveResults(job.results)
+      } else {
+        setSavedResults([])
+        saveResults([])
+      }
     }
   }, [job?.status, job?.results])
 
@@ -160,8 +165,6 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
   const handleScrape = () => {
     if (!query.trim()) return
     setSelected(new Set())
-    setSavedResults([])
-    localStorage.removeItem(STORAGE_KEY)
     startScrape(query, limit)
   }
 
@@ -699,8 +702,17 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
       {!showResults && !isActive && (
         <div className="bg-slate-800/20 border border-dashed border-slate-700 rounded-xl p-12 text-center">
           <MapPin size={48} className="mx-auto text-slate-600 mb-4" />
-          <p className="text-slate-500 text-lg mb-2">Nenhuma busca realizada</p>
-          <p className="text-slate-600 text-sm">Selecione nicho + cidade nos filtros acima ou digite diretamente</p>
+          {job?.status === 'done' && job.results.length === 0 ? (
+            <>
+              <p className="text-amber-400 text-lg mb-2">Nenhum resultado encontrado</p>
+              <p className="text-slate-500 text-sm">A busca retornou 0 leads. Tente ampliar os filtros ou usar outro termo.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-500 text-lg mb-2">Nenhuma busca realizada</p>
+              <p className="text-slate-600 text-sm">Selecione nicho + cidade nos filtros acima ou digite diretamente</p>
+            </>
+          )}
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             {['restaurante sao paulo', 'clinica odontologica rio de janeiro', 'escritorio advocacia belo horizonte', 'academia curitiba', 'corretora de seguros sao paulo'].map(ex => (
               <button key={ex} onClick={() => setQuery(ex)} className="text-xs bg-slate-800/50 border border-slate-700 text-slate-400 px-3 py-1.5 rounded-full hover:bg-slate-700/50 hover:text-white transition">

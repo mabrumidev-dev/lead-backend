@@ -48,20 +48,27 @@ async def start_scrape(req: ScrapeRequest):
                 if message: jobs[job_id]["messages"].append(message)
                 if progress >= 0: jobs[job_id]["progress"] = progress
     def run_scraper():
+        import logging
+        log = logging.getLogger("scraper")
         try:
+            log.warning(f"[SCRAPE] Starting scrape for '{req.query}' limit={req.limit} job={job_id}")
             engine = ScraperEngine(search_query=req.query, limit=req.limit, on_progress=on_progress)
             results = engine.scrape()
+            log.warning(f"[SCRAPE] Finished job {job_id}: {len(results)} results")
             with jobs_lock:
                 jobs[job_id]["status"] = "done"
                 jobs[job_id]["results"] = results
                 jobs[job_id]["progress"] = 100
                 jobs[job_id]["messages"].append(f"Concluido! {len(results)} registros coletados.")
         except Exception as e:
+            log.error(f"[SCRAPE] CRASHED job {job_id}: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             with jobs_lock:
                 jobs[job_id]["status"] = "done"
                 jobs[job_id]["results"] = []
                 jobs[job_id]["progress"] = 100
-                jobs[job_id]["messages"].append(f"Erro no scraper: {str(e)}")
+                jobs[job_id]["messages"].append(f"Erro no scraper: {type(e).__name__}: {str(e)[:200]}")
     thread = threading.Thread(target=run_scraper, daemon=True)
     thread.start()
     with jobs_lock:
@@ -72,7 +79,11 @@ async def start_scrape(req: ScrapeRequest):
 async def stream_scrape(job_id: str):
     from sse_starlette.sse import EventSourceResponse
     async def event_generator():
+        import logging
+        log = logging.getLogger("sse")
         last_msg_idx, last_screenshot_idx = 0, 0
+        heartbeat_count = 0
+        log.warning(f"[SSE] Client connected for job {job_id}")
         while True:
             with jobs_lock:
                 job = jobs.get(job_id)
@@ -87,11 +98,15 @@ async def stream_scrape(job_id: str):
                 yield {"event": "screenshot", "data": json.dumps({"image": screenshots[last_screenshot_idx]})}
                 last_screenshot_idx += 1
             if status == "done":
+                log.warning(f"[SSE] Sending done event for job {job_id}: {len(results)} results")
                 yield {"event": "done", "data": json.dumps({"results": results, "total": len(results), "progress": 100})}
                 return
             if status == "cancelled":
                 yield {"event": "error", "data": json.dumps({"message": "Cancelado"})}
                 return
+            heartbeat_count += 1
+            if heartbeat_count % 10 == 0:
+                yield {"event": "heartbeat", "data": json.dumps({"t": heartbeat_count})}
             await asyncio.sleep(0.5)
     return EventSourceResponse(event_generator())
 
