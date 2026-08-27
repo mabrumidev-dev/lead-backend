@@ -659,7 +659,7 @@ class ScraperEngine:
         try:
             if not self.page:
                 return
-            png = self.page.screenshot(type="jpeg", quality=20)
+            png = self.page.screenshot(type="jpeg", quality=40)
             b64 = base64.b64encode(png).decode("utf-8")
             self.on_progress("", -2, b64)
             del png
@@ -847,10 +847,8 @@ class ScraperEngine:
                         "--disable-translate",
                         "--no-first-run",
                         "--mute-audio",
-                        "--js-flags=--max-old-space-size=32",
-                        "--single-process",
+                        "--js-flags=--max-old-space-size=64",
                         "--disable-setuid-sandbox",
-                        "--no-zygote",
                         "--disable-accelerated-2d-canvas",
                         "--disable-accelerated-video-decode",
                         "--disable-background-timer-throttling",
@@ -876,7 +874,7 @@ class ScraperEngine:
                 return []
 
             context = self.browser.new_context(
-                viewport={"width": 640, "height": 480},
+                viewport={"width": 800, "height": 600},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             )
             context.route("**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}", lambda route: route.abort())
@@ -915,7 +913,7 @@ class ScraperEngine:
 
             last_height = 0
             scroll_count = 0
-            max_scrolls = 30
+            max_scrolls = 50
 
             while scroll_count < max_scrolls:
                 if self._cancelled:
@@ -969,7 +967,6 @@ class ScraperEngine:
                 self.page.goto("about:blank")
                 import gc
                 gc.collect()
-                gc.collect()
             except Exception:
                 pass
 
@@ -982,9 +979,7 @@ class ScraperEngine:
                     break
 
                 if i > 0 and i % 5 == 0:
-                    import gc
-                    gc.collect()
-                    gc.collect()
+                    pass
 
                 progress = 45 + int((i / total_links) * 50)
                 self._msg(f"Coletando {i + 1}/{total_links}... ({len(final_data)} validos)", progress)
@@ -1014,7 +1009,6 @@ class ScraperEngine:
                 except Exception:
                     pass
                 import gc
-                gc.collect()
                 gc.collect()
 
             self._msg(f"Concluido! {len(final_data)} registros coletados.", 100)
