@@ -150,14 +150,43 @@ def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
     return None
 
 
-def _clean_business_name(raw_name: str) -> str:
-    """Clean scraped name: remove descriptions, ratings, neighborhoods."""
+def _clean_business_name(raw_name: str, city: str = "") -> str:
+    """Clean scraped name: remove descriptions, ratings, neighborhoods, and city suffixes."""
     name = raw_name
     for sep in [':', '|', ' - ', ' – ', ' — ']:
         if sep in name:
             name = name.split(sep)[0]
     name = re.sub(r'\s*\d+[\.,]?\d*\s*(estrelas?|stars?|reviews?|avaliacoes?)', '', name, flags=re.I)
     name = name.strip(' ,.-')
+
+    if city:
+        words = name.split()
+        city_lower = city.lower()
+
+        def _matches_city(w: str) -> bool:
+            wl = w.lower()
+            if len(wl) < 3:
+                return False
+            if wl == city_lower:
+                return True
+            if city_lower.startswith(wl) and len(wl) >= 4:
+                return True
+            if wl.startswith(city_lower):
+                return True
+            common = 0
+            for a, b in zip(wl, city_lower):
+                if a == b:
+                    common += 1
+                else:
+                    break
+            if common >= 5 and common >= min(len(wl), len(city_lower)) * 0.6:
+                return True
+            return False
+
+        filtered = [w for w in words if not _matches_city(w)]
+        if filtered:
+            name = ' '.join(filtered).strip()
+
     return name
 
 
@@ -280,7 +309,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
 
     # Strategy 2: Parallel search (Bing + directories) - max 10s
     if not cnpj:
-        clean_name = _clean_business_name(business_name)
+        clean_name = _clean_business_name(business_name, city)
         if clean_name:
             log.warning("[CNPJ] Strategy 2: Bing + directories...")
             with ThreadPoolExecutor(max_workers=3) as executor:
@@ -300,7 +329,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
 
     # Strategy 3: cnpj.biz via Google Translate proxy (bypasses IP blocks)
     if not cnpj:
-        clean_name = _clean_business_name(business_name)
+        clean_name = _clean_business_name(business_name, city)
         if clean_name:
             log.warning("[CNPJ] Strategy 3: Google Translate proxy...")
             cnpj = _cnpj_from_biz_translate(clean_name, city)
