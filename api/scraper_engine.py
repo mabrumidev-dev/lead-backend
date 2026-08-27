@@ -157,7 +157,8 @@ def _clean_business_name(raw_name: str, city: str = "") -> str:
         if sep in name:
             name = name.split(sep)[0]
     name = re.sub(r'\s*\d+[\.,]?\d*\s*(estrelas?|stars?|reviews?|avaliacoes?)', '', name, flags=re.I)
-    name = name.strip(' ,.-')
+    name = name.replace("'", " ").replace("'", " ")
+    name = re.sub(r'\s+', ' ', name).strip(' ,.-')
 
     if city:
         words = name.split()
