@@ -48,11 +48,13 @@ function formatPhone(phone: string | null): string {
 
 function extractCity(address: string | null): string {
   if (!address) return 'Sao Paulo'
-  const parts = address.split(',')
-  if (parts.length >= 2) {
-    const cityState = parts[parts.length - 2]?.trim()
-    const city = cityState?.split('-')[0]?.trim()
-    if (city) return city
+  const parts = address.split(',').map(p => p.trim())
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]
+    const cleaned = part.replace(/\d{5}-?\d{3}/g, '').replace(/\b[A-Z]{2}\b/g, '').trim()
+    if (!cleaned) continue
+    const sub = cleaned.split('-').map(s => s.trim()).filter(s => s && !/^\d+$/.test(s) && !/^[A-Z]{2}$/i.test(s))
+    if (sub.length > 0) return sub[sub.length - 1]
   }
   return 'Sao Paulo'
 }
