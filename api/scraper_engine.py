@@ -973,7 +973,7 @@ class ScraperEngine:
             return final_data
 
         except Exception as e:
-            self._msg(f"Erro: {str(e)}", -1)
+            self._msg(f"Erro [{type(e).__name__}]: {str(e)[:200]}", -1)
             try:
                 if self.browser:
                     self.browser.close()
