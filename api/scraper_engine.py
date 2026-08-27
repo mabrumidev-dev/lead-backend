@@ -659,9 +659,12 @@ class ScraperEngine:
         try:
             if not self.page:
                 return
-            png = self.page.screenshot(type="jpeg", quality=40)
+            png = self.page.screenshot(type="jpeg", quality=20)
             b64 = base64.b64encode(png).decode("utf-8")
             self.on_progress("", -2, b64)
+            del png
+            import gc
+            gc.collect()
         except Exception:
             pass
 
@@ -830,7 +833,28 @@ class ScraperEngine:
                         "--disable-translate",
                         "--no-first-run",
                         "--mute-audio",
-                        "--js-flags=--max-old-space-size=64",
+                        "--js-flags=--max-old-space-size=32",
+                        "--single-process",
+                        "--disable-setuid-sandbox",
+                        "--no-zygote",
+                        "--disable-accelerated-2d-canvas",
+                        "--disable-accelerated-video-decode",
+                        "--disable-background-timer-throttling",
+                        "--disable-backgrounding-occluded-windows",
+                        "--disable-breakpad",
+                        "--disable-client-side-phishing-detection",
+                        "--disable-component-update",
+                        "--disable-domain-reliability-monitoring",
+                        "--disable-features=TranslateUI",
+                        "--disable-hang-monitor",
+                        "--disable-ipc-flooding-protection",
+                        "--disable-popup-blocking",
+                        "--disable-prompt-on-repost",
+                        "--disable-renderer-backgrounding",
+                        "--disable-smooth-scrolling",
+                        "--disable-web-security",
+                        "--metrics-recording-only",
+                        "--no-default-browser-check",
                     ],
                 )
             except Exception as e:
@@ -838,12 +862,16 @@ class ScraperEngine:
                 return []
 
             context = self.browser.new_context(
-                viewport={"width": 800, "height": 600},
+                viewport={"width": 640, "height": 480},
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             )
             context.route("**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}", lambda route: route.abort())
             context.route("**/analytics**", lambda route: route.abort())
             context.route("**/stats**", lambda route: route.abort())
+            context.route("**/google-analytics**", lambda route: route.abort())
+            context.route("**/googletagmanager**", lambda route: route.abort())
+            context.route("**/*.woff2", lambda route: route.abort())
+            context.route("**/data:image/**", lambda route: route.abort())
             self.page = context.new_page()
 
             self._msg("Abrindo Google Maps...", 10)
@@ -873,7 +901,7 @@ class ScraperEngine:
 
             last_height = 0
             scroll_count = 0
-            max_scrolls = 50
+            max_scrolls = 30
 
             while scroll_count < max_scrolls:
                 if self._cancelled:
@@ -887,7 +915,7 @@ class ScraperEngine:
                 scroll_count += 1
                 self._msg(f"Rolando resultados... ({scroll_count})", min(15 + scroll_count, 40))
 
-                if scroll_count % 10 == 0:
+                if scroll_count % 20 == 0:
                     self._screenshot()
 
                 new_height = self.page.evaluate(
@@ -924,6 +952,9 @@ class ScraperEngine:
 
             try:
                 self.page.goto("about:blank")
+                import gc
+                gc.collect()
+                gc.collect()
             except Exception:
                 pass
 
@@ -934,6 +965,11 @@ class ScraperEngine:
                 if self.limit > 0 and len(final_data) >= self.limit:
                     self._msg(f"Limite de {self.limit} leads atingido!", 100)
                     break
+
+                if i > 0 and i % 5 == 0:
+                    import gc
+                    gc.collect()
+                    gc.collect()
 
                 progress = 45 + int((i / total_links) * 50)
                 self._msg(f"Coletando {i + 1}/{total_links}... ({len(final_data)} validos)", progress)
@@ -957,9 +993,11 @@ class ScraperEngine:
                 try:
                     self.page.evaluate("() => { document.body.innerHTML = ''; }")
                     self.page.goto("about:blank")
+                    self.page.evaluate("() => { if(window.gc) window.gc(); }")
                 except Exception:
                     pass
                 import gc
+                gc.collect()
                 gc.collect()
 
             self._msg(f"Concluido! {len(final_data)} registros coletados.", 100)
