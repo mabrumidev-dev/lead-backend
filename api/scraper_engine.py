@@ -694,6 +694,8 @@ class ScraperEngine:
         return False
 
     def _parsing(self) -> Optional[dict]:
+        import logging
+        log = logging.getLogger("parsing")
         try:
             sleep(3)
             self._screenshot()
@@ -724,6 +726,7 @@ class ScraperEngine:
                 try:
                     html = self.page.evaluate("() => document.body.innerHTML")
                 except Exception:
+                    log.error("[PARSING] Falha ao obter HTML")
                     return None
 
             soup = BeautifulSoup(html, "html.parser")
@@ -738,6 +741,15 @@ class ScraperEngine:
                 name = nameElement.text.strip()
 
             if not name:
+                h1_tags = soup.find_all("h1")
+                log.warning(f"[PARSING] h1.DUwDvf nao encontrado. h1 tags: {len(h1_tags)}")
+                for h1 in h1_tags[:3]:
+                    log.warning(f"[PARSING] h1 found: {h1.get_text(strip=True)[:50]}")
+                try:
+                    current_url = self.page.url
+                    log.warning(f"[PARSING] Current URL: {current_url}")
+                except:
+                    pass
                 return None
 
             try:
@@ -805,6 +817,8 @@ class ScraperEngine:
             return None
 
     def scrape(self) -> list[dict]:
+        import logging
+        log = logging.getLogger("scraper")
         try:
             if not sync_playwright:
                 self._msg("Playwright nao esta instalado.", -1)
@@ -946,6 +960,7 @@ class ScraperEngine:
             allResultsLinks = [a.get("href") for a in allResultsAnchorTags if a.get("href")]
 
             total_links = len(allResultsLinks)
+            log.warning(f"[SCRAPE] Links found in feed: {total_links}")
             if self.limit > 0:
                 total_links = min(total_links, self.limit)
             self._msg(f"Encontrados {len(allResultsLinks)} resultados. Coletando{f' (limite: {self.limit})' if self.limit > 0 else ''}...", 45)
@@ -985,10 +1000,12 @@ class ScraperEngine:
                         if data:
                             data["Link"] = allResultsLinks[i]
                             final_data.append(data)
+                            log.warning(f"[SCRAPE] Lead {len(final_data)}: {data.get('Name', 'N/A')}")
                         else:
                             self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
                 except Exception as e:
                     self._msg(f"Erro no lead {i + 1}: {str(e)}", progress)
+                    log.error(f"[SCRAPE] Error on lead {i + 1}: {type(e).__name__}: {e}")
 
                 try:
                     self.page.evaluate("() => { document.body.innerHTML = ''; }")
