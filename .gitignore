@@ -17,6 +17,9 @@ dist-ssr
 .env.local
 .env.*.local
 
+# OpenCode config (contains API keys)
+opencode.json
+
 # Python
 __pycache__/
 *.pyc

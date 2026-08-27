@@ -8,7 +8,7 @@ export interface Lead {
   plan: 'Individual' | 'Empresarial' | 'Grupo'
   status: 'new' | 'contacted' | 'qualified'
   score: number // 0-100
-  source: 'website' | 'referral' | 'purchase'
+  source: 'website' | 'referral' | 'purchase' | 'IA Vision' | 'Google Maps' | 'CSV'
   created_at: string
 }
 

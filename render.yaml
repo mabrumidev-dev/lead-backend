@@ -15,5 +15,7 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
       - key: PORT
         value: "10000"

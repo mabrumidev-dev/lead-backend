@@ -3,8 +3,8 @@ echo ============================================
 echo   MABRUMI CRM - Iniciando Servidores
 echo ============================================
 echo.
-echo [1/2] Instalando dependencias Python...
-pip install -r api\requirements.txt --user -q
+echo [1/2] Verificando/Instalando dependencias Python no ambiente virtual...
+call "%~dp0..\venv\Scripts\pip.exe" install -r "%~dp0api\requirements.txt" -q
 echo.
 echo [2/2] Iniciando servidores...
 echo.
@@ -14,7 +14,7 @@ echo.
 echo   Pressione Ctrl+C para parar ambos.
 echo.
 
-start "Mabrumi API" cmd /c "cd /d %~dp0api && python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
+start "Mabrumi API" cmd /c "cd /d %~dp0api && ..\..\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
 start "Mabrumi Frontend" cmd /c "cd /d %~dp0 && npx.cmd vite"
 
 echo.

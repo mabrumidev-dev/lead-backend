@@ -232,7 +232,7 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
       if (lead2.CNPJ || lead2.Name) {
         setEnrichProgress(`${i + 1}/${selectedArr.length}: Verificando plano de saude...`)
         try {
-          const hp = await checkHealthPlan(lead2.CNPJ || '', lead2.Name || '', lead2.Porte || '', String(lead2.QSA?.length || 0), lead2.CapitalSocial || '', String(lead2.CNAEFiscal || ''))
+          const hp = await checkHealthPlan(lead2.CNPJ || '', lead2.Name || '', lead2.Porte || '', String(lead2.QSA?.length || 0), String(lead2.CapitalSocial || ''), String(lead2.CNAEFiscal || ''))
           updated[idx] = { ...lead2, HealthPlan: hp }
         } catch {}
       }
@@ -242,7 +242,7 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
       if (lead3.Name) {
         setEnrichProgress(`${i + 1}/${selectedArr.length}: Buscando quadro de colaboradores...`)
         try {
-          const ec = await checkEmployeeCount(lead3.Name || lead3.NomeFantasia || '', lead3.CNPJ || '', lead3.Porte || '', lead3.CapitalSocial || '', String(lead3.CNAEFiscal || ''))
+          const ec = await checkEmployeeCount(lead3.Name || lead3.NomeFantasia || '', lead3.CNPJ || '', lead3.Porte || '', String(lead3.CapitalSocial || ''), String(lead3.CNAEFiscal || ''))
           updated[idx] = { ...lead3, EmployeeCount: ec }
         } catch {}
       }
@@ -307,11 +307,17 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
           'Total Reviews': r['Total Reviews'] || '',
         }
         return {
-          nome: r.Name || '',
-          telefone,
-          cidade: extractCity(r.Address),
-          plano: 'Individual',
+          id: crypto.randomUUID(),
+          name: r.Name || '',
+          email: r.Email || '',
+          phone: telefone,
+          age: null,
+          city: extractCity(r.Address),
+          plan: 'Individual' as const,
+          status: 'new' as const,
           score: calculateScore(r.Rating, r['Total Reviews']),
+          source: 'Google Maps' as const,
+          created_at: new Date().toISOString(),
         }
       })
 
