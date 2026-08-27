@@ -46,14 +46,22 @@ function formatPhone(phone: string | null): string {
   return phone
 }
 
+const SKIP_WORDS = ['Brazil', 'Brasil', 'BR']
+
 function extractCity(address: string | null): string {
   if (!address) return 'Sao Paulo'
   const parts = address.split(',').map(p => p.trim())
   for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]
-    const cleaned = part.replace(/\d{5}-?\d{3}/g, '').replace(/\b[A-Z]{2}\b/g, '').trim()
-    if (!cleaned) continue
-    const sub = cleaned.split('-').map(s => s.trim()).filter(s => s && !/^\d+$/.test(s) && !/^[A-Z]{2}$/i.test(s))
+    let part = parts[i]
+    part = part.replace(/\d{5}-?\d{3}/g, '').trim()
+    if (!part) continue
+    const sub = part.split('-').map(s => s.trim()).filter(s => {
+      if (!s) return false
+      if (/^\d+$/.test(s)) return false
+      if (/^[A-Z]{2}$/i.test(s)) return false
+      if (SKIP_WORDS.some(w => w.toLowerCase() === s.toLowerCase())) return false
+      return true
+    })
     if (sub.length > 0) return sub[sub.length - 1]
   }
   return 'Sao Paulo'
