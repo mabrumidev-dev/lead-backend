@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: lead-backend
+    name: lead-backend-rezr
     runtime: docker
     plan: starter
     dockerfilePath: Dockerfile
