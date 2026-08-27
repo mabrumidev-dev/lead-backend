@@ -5,11 +5,16 @@ import uuid
 import threading
 import asyncio
 import re
+import logging
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
+
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
+logger.warning("[MAIN] FastAPI starting up...")
 
 sys.path.insert(0, os.path.dirname(__file__))
 from scraper_engine import ScraperEngine, lookup_cnpj, search_social_media, check_health_plan, check_employee_count
@@ -50,9 +55,14 @@ async def start_scrape(req: ScrapeRequest):
     def run_scraper():
         import logging
         log = logging.getLogger("scraper")
+        log.warning(f"[SCRAPE] Thread started for job={job_id}")
         try:
             log.warning(f"[SCRAPE] Starting scrape for '{req.query}' limit={req.limit} job={job_id}")
+            log.warning(f"[SCRAPE] Importing ScraperEngine...")
+            from scraper_engine import ScraperEngine
+            log.warning(f"[SCRAPE] Creating engine...")
             engine = ScraperEngine(search_query=req.query, limit=req.limit, on_progress=on_progress)
+            log.warning(f"[SCRAPE] Engine created. Starting scrape...")
             results = engine.scrape()
             log.warning(f"[SCRAPE] Finished job {job_id}: {len(results)} results")
             with jobs_lock:
