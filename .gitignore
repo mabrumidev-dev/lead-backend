@@ -31,8 +31,17 @@ api/test_syntax.py
 # Chrome user data
 api/chrome_user_data/
 
-# Backup files
+# Backup / temp files
 arq_backup_app.jsx/
+analyze_image.py
+api/main copy.py
+test_local.py
+test_name.py
+test_render.py
+clear
+dir
+teste.png
+print.png/
 
 # Windows reserved names
 con
