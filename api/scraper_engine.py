@@ -33,18 +33,24 @@ def _normalize_phone(phone: str) -> str:
     if not phone:
         return phone
     digits = re.sub(r'\D', '', phone)
-    if digits.startswith('55') and len(digits) > 11:
-        digits = digits[2:]
-    if len(digits) == 10:
-        ddd = digits[:2]
+    if len(digits) == 13 and digits.startswith('55'):
+        ddd = digits[2:4]
+        number = digits[4:]
         if ddd in DDD_MAP:
-            return f"({ddd}) {digits[2:6]}-{digits[6:]}"
-        return f"({ddd}) {digits[2:6]}-{digits[6:]}"
+            if len(number) == 9:
+                return f"+55 ({ddd}) {number[:5]}-{number[5:]}"
+            elif len(number) == 8:
+                return f"+55 ({ddd}) {number[:4]}-{number[4:]}"
     if len(digits) == 11:
         ddd = digits[:2]
+        number = digits[2:]
         if ddd in DDD_MAP:
-            return f"({ddd}) {digits[2:7]}-{digits[7:]}"
-        return f"({ddd}) {digits[2:7]}-{digits[7:]}"
+            return f"+55 ({ddd}) {number[:5]}-{number[5:]}"
+    if len(digits) == 10:
+        ddd = digits[:2]
+        number = digits[2:]
+        if ddd in DDD_MAP:
+            return f"+55 ({ddd}) {number[:4]}-{number[4:]}"
     return phone
 
 try:
@@ -754,8 +760,23 @@ class ScraperEngine:
                     }
                     
                     result.phone = null;
-                    const telLink = document.querySelector('a[href^="tel:"]');
-                    if (telLink) result.phone = telLink.href.replace('tel:', '');
+                    const phoneBtn = document.querySelector('button[data-item-id="phone:"]')
+                        || document.querySelector('[data-item-id*="phone"]');
+                    if (phoneBtn) {
+                        const label = phoneBtn.getAttribute('aria-label') || phoneBtn.textContent;
+                        const match = label.match(/\+?\d[\d\s\-\(\)]{8,}/);
+                        if (match) result.phone = match[0].trim();
+                    }
+                    if (!result.phone) {
+                        const telLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+                        for (const link of telLinks) {
+                            const num = link.href.replace('tel:', '').replace(/\D/g, '');
+                            if (num.length >= 10 && num.length <= 13) {
+                                result.phone = link.href.replace('tel:', '');
+                                break;
+                            }
+                        }
+                    }
                     if (!result.phone) {
                         const phoneLabel = Array.from(document.querySelectorAll('[aria-label]')).find(el => 
                             /^(Telefone|Phone|Tel)/i.test(el.getAttribute('aria-label')));
