@@ -53,7 +53,10 @@ async def start_scrape(req: ScrapeRequest):
                 if message: jobs[job_id]["messages"].append(message)
                 if progress >= 0: jobs[job_id]["progress"] = progress
     def run_scraper():
+        import asyncio
         import logging
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         log = logging.getLogger("scraper")
         log.warning(f"[SCRAPE] Thread started for job={job_id}")
         try:
