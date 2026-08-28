@@ -912,6 +912,23 @@ class ScraperEngine:
                 if scroll_count % 20 == 0:
                     self._screenshot()
 
+                if scroll_count % 5 == 0:
+                    current_links = self.page.evaluate("""
+                        () => {
+                            const feed = document.querySelector('[role="feed"]');
+                            if (!feed) return 0;
+                            const links = Array.from(feed.querySelectorAll('a[href]'));
+                            return links.filter(a => {
+                                const h = a.getAttribute('href');
+                                return h && (h.includes('/maps/place/') || h.includes('/maps/search/'));
+                            }).length;
+                        }
+                    """)
+                    needed = self.limit * 4 if self.limit > 0 else 999
+                    if current_links >= needed:
+                        self._msg(f"Suficientes {current_links} links para {self.limit} leads. Parando scroll.", min(15 + scroll_count, 40))
+                        break
+
                 new_height = self.page.evaluate(
                     "() => { const el = document.querySelector(\"[role='feed']\"); return el ? el.scrollHeight : 0; }"
                 )
@@ -957,8 +974,9 @@ class ScraperEngine:
 
             total_links = len(allResultsLinks)
             log.warning(f"[SCRAPE] Links found in feed: {total_links}")
-            if self.limit > 0:
-                total_links = min(total_links, self.limit)
+            if self.limit > 0 and total_links > self.limit * 3:
+                allResultsLinks = allResultsLinks[:self.limit * 3]
+                total_links = len(allResultsLinks)
             self._msg(f"Encontrados {len(allResultsLinks)} resultados. Coletando{f' (limite: {self.limit})' if self.limit > 0 else ''}...", 45)
 
             try:
