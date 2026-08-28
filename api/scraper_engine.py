@@ -423,7 +423,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
 
 
 def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optional[dict]:
-    """Fallback: search Google for CNPJ when scraper fails to get lead data."""
+    """Fallback: search DuckDuckGo for CNPJ (Google blocks automated requests)."""
     import logging
     log = logging.getLogger("fallback")
     
@@ -434,25 +434,27 @@ def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optio
     if not clean_name:
         return None
     
-    query = f"localize o cnpj da empresa {clean_name}"
-    if state:
-        query += f",{state}"
-    elif city:
-        query += f",{city}"
+    query = f"{clean_name} cnpj"
+    if city:
+        query += f" {city}"
+    elif state:
+        query += f" {state}"
     
-    log.warning(f"[FALLBACK] Searching Google for: {query}")
+    log.warning(f"[FALLBACK] Searching DuckDuckGo for: {query}")
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
+        "Accept": "text/html",
         "Accept-Language": "pt-BR,pt;q=0.9",
     }
     
     cnpj = None
+    
+    # Strategy 1: DuckDuckGo HTML (fast, no bot detection)
     try:
         resp = requests.get(
-            f"https://www.google.com/search?q={requests.utils.quote(query)}&hl=pt-BR",
-            timeout=6,
+            f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}",
+            timeout=8,
             headers=headers
         )
         if resp.status_code == 200:
@@ -461,11 +463,12 @@ def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optio
                 digits = re.sub(r'\D', '', raw)
                 if _is_valid_cnpj(digits):
                     cnpj = digits
-                    log.warning(f"[FALLBACK] Found CNPJ: {raw}")
+                    log.warning(f"[FALLBACK] Found CNPJ via DuckDuckGo: {raw}")
                     break
     except Exception as e:
-        log.error(f"[FALLBACK] Google search error: {e}")
+        log.error(f"[FALLBACK] DuckDuckGo search error: {e}")
     
+    # Strategy 2: Bing (fallback if DDG fails)
     if not cnpj:
         try:
             resp = requests.get(
@@ -488,7 +491,7 @@ def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optio
         log.warning(f"[FALLBACK] Looking up CNPJ {cnpj} on Minha Receita...")
         result = _lookup_cnpj_api(cnpj)
         if result:
-            result["FallbackSource"] = "Google Search"
+            result["FallbackSource"] = "DuckDuckGo Search"
             return result
     
     log.warning("[FALLBACK] No CNPJ found")

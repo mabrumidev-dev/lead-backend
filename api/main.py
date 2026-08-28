@@ -201,7 +201,7 @@ async def enrich_lead(data: dict):
                 state = state_match.group(1)
         fallback_result = await asyncio.wait_for(
             loop.run_in_executor(None, _fallback_google_search, business_name, city, state),
-            timeout=15.0,
+            timeout=12.0,
         )
         if fallback_result:
             log.warning(f"[ENRICH] Fallback found CNPJ: {fallback_result.get('cnpj','')}")
