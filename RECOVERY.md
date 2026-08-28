@@ -80,7 +80,7 @@ cd api
 python -m uvicorn main:app --reload --port 8002
 
 # Frontend
-npm run dev
+cmd /k "npm run dev"
 ```
 
 ### Deploy manual
@@ -88,6 +88,27 @@ npm run dev
 git add .
 git commit -m "mensagem"
 git push
+# Depois: Render → Manual Deploy → Deploy latest commit
+```
+
+### Diagnóstico do Scraper
+```bash
+# Ver logs do Render
+# Dashboard → lead-backend-rezr → Monitoring → Logs
+# Filtrar por: [SCRAPE] ou [PARSING]
+
+# Problemas comuns:
+# 1. "0 results" → Scraper não encontra links no feed
+#    Causa: Google Maps mudou CSS classes
+#    Solução: Usar JS evaluation (document.querySelectorAll)
+
+# 2. Instance restarted → OOM kill (512MB free tier)
+#    Causa: Chromium consome muita memória
+#    Solução: Fechar/reabrir página entre leads
+
+# 3. SyntaxWarning: invalid escape sequence
+#    Causa: Regex com \d em string normal
+#    Solução: Usar raw string r"""
 ```
 
 ## Checklist de Segurança
