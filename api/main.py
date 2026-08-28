@@ -182,13 +182,13 @@ async def enrich_lead(data: dict):
         loop = asyncio.get_event_loop()
         result = await asyncio.wait_for(
             loop.run_in_executor(None, lookup_cnpj, website, business_name, city, phone),
-            timeout=55.0,
+            timeout=30.0,
         )
         log.warning(f"[ENRICH] Result: {'FOUND' if result else 'EMPTY'} cnpj={result.get('cnpj','') if result else ''}")
         if result:
             return result
     except asyncio.TimeoutError:
-        log.error(f"[ENRICH] TIMEOUT after 55s for name={business_name}")
+        log.error(f"[ENRICH] TIMEOUT after 30s for name={business_name}")
     except Exception as e:
         log.error(f"[ENRICH] Error: {type(e).__name__}: {e}")
     
@@ -201,7 +201,7 @@ async def enrich_lead(data: dict):
                 state = state_match.group(1)
         fallback_result = await asyncio.wait_for(
             loop.run_in_executor(None, _fallback_google_search, business_name, city, state),
-            timeout=30.0,
+            timeout=15.0,
         )
         if fallback_result:
             log.warning(f"[ENRICH] Fallback found CNPJ: {fallback_result.get('cnpj','')}")

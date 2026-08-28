@@ -341,20 +341,28 @@ def _cnpj_from_biz_translate(business_name: str, city: str = "") -> Optional[str
 def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone: str = "") -> Optional[dict]:
     """Find CNPJ using parallel strategies, then lookup on Minha Receita."""
     import logging
+    import time as _time
     from concurrent.futures import ThreadPoolExecutor, as_completed
     log = logging.getLogger("lookup_cnpj")
     log.warning(f"[CNPJ] lookup_cnpj called: website={website_url} name={business_name} city={city}")
 
+    # Hard global budget — return None early if we exceed it. Prevents 3min hangs.
+    BUDGET = 25.0
+    start = _time.time()
+
+    def _left() -> float:
+        return BUDGET - (_time.time() - start)
+
     cnpj = None
 
     # Strategy 1: Website scraping (fastest, most reliable)
-    if _is_useful_website(website_url):
+    if _is_useful_website(website_url) and _left() > 0:
         log.warning("[CNPJ] Strategy 1: website scraping...")
         cnpj = _cnpj_from_website(website_url)
         log.warning(f"[CNPJ] Strategy 1 result: {cnpj}")
 
-    # Strategy 2: Parallel search (Bing + directories) - max 10s
-    if not cnpj:
+    # Strategy 2: Parallel search (Bing + directories) - bounded by remaining budget
+    if not cnpj and _left() > 0:
         clean_name = _clean_business_name(business_name, city)
         if clean_name:
             log.warning("[CNPJ] Strategy 2: Bing + directories...")
@@ -363,7 +371,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                     executor.submit(_cnpj_from_bing, clean_name, city): "bing",
                     executor.submit(_cnpj_from_directories, clean_name, city, phone): "dir",
                 }
-                for future in as_completed(futures, timeout=10):
+                for future in as_completed(futures, timeout=max(1.0, min(_left(), 10))):
                     try:
                         result = future.result()
                         if result:
@@ -374,15 +382,18 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                         continue
 
     # Strategy 3: cnpj.biz via Google Translate proxy (bypasses IP blocks)
-    if not cnpj:
+    if not cnpj and _left() > 0:
         clean_name = _clean_business_name(business_name, city)
         if clean_name:
             log.warning("[CNPJ] Strategy 3: Google Translate proxy...")
-            cnpj = _cnpj_from_biz_translate(clean_name, city)
+            try:
+                cnpj = _cnpj_from_biz_translate(clean_name, city)
+            except Exception as e:
+                log.warning(f"[CNPJ] Strategy 3 error: {e}")
             log.warning(f"[CNPJ] Strategy 3 result: {cnpj}")
 
     # Strategy 4: Retry with short/core name (strips descriptors like "centro odontologico")
-    if not cnpj:
+    if not cnpj and _left() > 0:
         core_name = _short_business_name(_clean_business_name(business_name, city))
         if core_name and core_name != _clean_business_name(business_name, city):
             log.warning(f"[CNPJ] Strategy 4: retry with core name '{core_name}'...")
@@ -391,7 +402,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                     executor.submit(_cnpj_from_bing, core_name, city): "bing",
                     executor.submit(_cnpj_from_biz_translate, core_name, city): "biz",
                 }
-                for future in as_completed(futures, timeout=15):
+                for future in as_completed(futures, timeout=max(1.0, min(_left(), 10))):
                     try:
                         result = future.result()
                         if result:
@@ -403,8 +414,11 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
 
     if cnpj:
         log.warning(f"[CNPJ] Found CNPJ {cnpj}, calling Minha Receita API...")
-        return _lookup_cnpj_api(cnpj)
-    log.warning("[CNPJ] All strategies failed, returning None")
+        # Reserve time for the API lookup inside the budget
+        if _left() > 0:
+            return _lookup_cnpj_api(cnpj)
+        return None
+    log.warning(f"[CNPJ] All strategies failed after {_time.time()-start:.1f}s, returning None")
     return None
 
 
@@ -438,7 +452,7 @@ def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optio
     try:
         resp = requests.get(
             f"https://www.google.com/search?q={requests.utils.quote(query)}&hl=pt-BR",
-            timeout=10,
+            timeout=6,
             headers=headers
         )
         if resp.status_code == 200:
@@ -456,7 +470,7 @@ def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optio
         try:
             resp = requests.get(
                 f"https://www.bing.com/search?q={requests.utils.quote(query)}",
-                timeout=8,
+                timeout=6,
                 headers=headers
             )
             if resp.status_code == 200:
