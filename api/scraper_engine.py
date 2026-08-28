@@ -1019,11 +1019,8 @@ class ScraperEngine:
                     log.error(f"[SCRAPE] Error on lead {i + 1}: {type(e).__name__}: {e}")
 
                 try:
-                    self.page.close()
-                except Exception:
-                    pass
-                try:
-                    self.page = self.browser.new_page()
+                    self.page.goto("about:blank")
+                    self.page.evaluate("() => { document.body.innerHTML = ''; }")
                 except Exception:
                     pass
                 import gc
