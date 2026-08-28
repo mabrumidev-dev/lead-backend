@@ -703,128 +703,88 @@ class ScraperEngine:
             current_url = self.page.url
             log.warning(f"[PARSING] URL: {current_url}")
 
-            for _ in range(15):
-                if self._cancelled:
-                    return None
-                found = self.page.evaluate("""
-                    () => document.querySelector("h1.DUwDvf") !== null ||
-                           document.querySelector("h1") !== null ||
-                           document.querySelector("[data-attrid='title']") !== null
-                """)
-                if found:
-                    break
-                sleep(1)
-
-            h1_info = self.page.evaluate("""
+            page_data = self.page.evaluate("""
                 () => {
-                    const h1s = document.querySelectorAll('h1');
-                    return Array.from(h1s).map(h => ({
-                        text: h.textContent.substring(0, 80),
-                        className: h.className,
-                        id: h.id
-                    }));
+                    const result = {};
+                    
+                    const h1 = document.querySelector('h1');
+                    result.name = h1 ? h1.textContent.trim() : null;
+                    
+                    result.address = null;
+                    const addrBtn = document.querySelector('button[data-item-id="address"]') 
+                        || document.querySelector('[data-item-id="address"]');
+                    if (addrBtn) result.address = addrBtn.textContent.trim();
+                    if (!result.address) {
+                        const addrLabel = Array.from(document.querySelectorAll('[aria-label]')).find(el => 
+                            /^(Endereço|Address|Dirección)/i.test(el.getAttribute('aria-label')));
+                        if (addrLabel) result.address = addrLabel.getAttribute('aria-label').split(':').slice(1).join(':').trim();
+                    }
+                    
+                    result.phone = null;
+                    const telLink = document.querySelector('a[href^="tel:"]');
+                    if (telLink) result.phone = telLink.href.replace('tel:', '');
+                    if (!result.phone) {
+                        const phoneLabel = Array.from(document.querySelectorAll('[aria-label]')).find(el => 
+                            /^(Telefone|Phone|Tel)/i.test(el.getAttribute('aria-label')));
+                        if (phoneLabel) result.phone = phoneLabel.getAttribute('aria-label').split(':').slice(1).join(':').trim();
+                    }
+                    
+                    result.website = null;
+                    const websiteBtn = document.querySelector('a[data-item-id="authority"]')
+                        || document.querySelector('[data-item-id="authority"]');
+                    if (websiteBtn) result.website = websiteBtn.href || websiteBtn.getAttribute('data-item-id-url');
+                    if (!result.website) {
+                        const webLink = Array.from(document.querySelectorAll('a[href]')).find(a => {
+                            const h = a.getAttribute('href');
+                            return h && h.startsWith('http') && !h.includes('google.com') && !h.includes('gstatic');
+                        });
+                        if (webLink) result.website = webLink.getAttribute('href');
+                    }
+                    
+                    result.rating = null;
+                    const ratingSpan = document.querySelector('span[role="img"][aria-label*="estrela"]')
+                        || document.querySelector('span[role="img"][aria-label*="star"]')
+                        || document.querySelector('span[role="img"][aria-label*="rating"]');
+                    if (ratingSpan) result.rating = ratingSpan.getAttribute('aria-label');
+                    
+                    result.reviews = null;
+                    const reviewsSpan = Array.from(document.querySelectorAll('span')).find(s => 
+                        /^\d[\d.,]*\s*avalia/i.test(s.textContent.trim()));
+                    if (reviewsSpan) result.reviews = reviewsSpan.textContent.trim();
+                    
+                    result.category = null;
+                    const catBtn = document.querySelector('button[jsaction*="category"]')
+                        || Array.from(document.querySelectorAll('span')).find(s => 
+                            /clínica|odonto|restaurant|escritório|academia/i.test(s.textContent));
+                    if (catBtn) result.category = catBtn.textContent.trim();
+                    
+                    result.hours = null;
+                    const hoursSpan = Array.from(document.querySelectorAll('[aria-label]')).find(el =>
+                        /^(Aberto|Fechado|Horário|Open|Closed)/i.test(el.getAttribute('aria-label')));
+                    if (hoursSpan) result.hours = hoursSpan.getAttribute('aria-label').split(':').slice(1).join(':').trim();
+                    
+                    return result;
                 }
             """)
-            log.warning(f"[PARSING] h1 elements found: {len(h1_info)}")
-            for h in h1_info[:3]:
-                log.warning(f"[PARSING] h1: class={h.get('className','')} text={h.get('text','')[:60]}")
 
-            rating = totalReviews = address = websiteUrl = phone = None
-
-            html = None
-            try:
-                el = self.page.query_selector("[role='main']")
-                if el:
-                    html = el.evaluate("el => el.outerHTML")
-            except Exception:
-                pass
-
-            if not html:
-                try:
-                    html = self.page.evaluate("() => document.body.innerHTML")
-                except Exception:
-                    log.error("[PARSING] Falha ao obter HTML")
-                    return None
-
-            soup = BeautifulSoup(html, "html.parser")
-
-            name = None
-            nameElement = (
-                soup.select_one(".tAiQdd h1.DUwDvf") or
-                soup.select_one("h1.DUwDvf") or
-                soup.select_one("h1")
-            )
-            if nameElement is not None:
-                name = nameElement.text.strip()
+            name = page_data.get("name")
+            log.warning(f"[PARSING] JS name: {name}")
 
             if not name:
-                h1_tags = soup.find_all("h1")
-                log.warning(f"[PARSING] h1.DUwDvf nao encontrado. h1 tags: {len(h1_tags)}")
-                for h1 in h1_tags[:3]:
-                    log.warning(f"[PARSING] h1 found: {h1.get_text(strip=True)[:50]}")
-                body_len = len(html) if html else 0
-                log.warning(f"[PARSING] HTML body length: {body_len}")
-                if html:
-                    log.warning(f"[PARSING] HTML preview: {html[:300]}")
-                try:
-                    current_url = self.page.url
-                    log.warning(f"[PARSING] Current URL: {current_url}")
-                except:
-                    pass
+                log.warning(f"[PARSING] No name found, page URL: {current_url}")
+                html_len = len(self.page.evaluate("() => document.body.innerHTML") or "")
+                log.warning(f"[PARSING] Body HTML length: {html_len}")
                 return None
 
-            try:
-                ratingEl = soup.find("span", class_="ceNzKf")
-                if ratingEl:
-                    rating = ratingEl.get("aria-label")
-            except Exception:
-                rating = None
+            address = page_data.get("address")
+            phone = page_data.get("phone")
+            websiteUrl = page_data.get("website")
+            rating = page_data.get("rating")
+            totalReviews = page_data.get("reviews")
+            category = page_data.get("category")
+            hours = page_data.get("hours")
 
-            try:
-                reviewsDiv = soup.find("div", class_="F7nice")
-                if reviewsDiv:
-                    reviewsElement = reviewsDiv.find(
-                        "span", attrs={"role": "img", "aria-label": True}
-                    )
-                    if reviewsElement:
-                        totalReviews = reviewsElement.get("aria-label") or reviewsElement.get_text(strip=True)
-                    else:
-                        totalReviews = reviewsDiv.get_text(strip=True)
-            except Exception:
-                totalReviews = None
-
-            try:
-                webLink = soup.find(
-                    "a",
-                    href=lambda href: href and href.startswith("http") and "google.com" not in href,
-                )
-                if webLink is not None:
-                    websiteUrl = webLink.get("href")
-            except Exception:
-                websiteUrl = None
-
-            for element in soup.find_all(attrs={"aria-label": True}):
-                label = element.get("aria-label", "")
-                if re.match(r"^(Endere|Address|Adresse|Адрес|Indirizzo|Direcci)\w*\s*:", label, re.I):
-                    address = label.split(":", 1)[1].strip()
-                elif re.match(r"^(Telefone|Phone|Tel|Телефон)\s*:", label, re.I):
-                    phone = label.split(":", 1)[1].strip()
-
-            if not phone:
-                try:
-                    phoneLink = soup.find("a", href=lambda href: href and href.startswith("tel:"))
-                    if phoneLink is not None:
-                        phone = phoneLink.get("href")[4:]
-                except Exception:
-                    phone = None
-
-            if not address:
-                try:
-                    addrEl = soup.find(attrs={"data-item-id": "address"})
-                    if addrEl:
-                        address = addrEl.get_text(strip=True)
-                except Exception:
-                    pass
+            log.warning(f"[PARSING] parsed: name={name[:40]}, phone={phone}, website={websiteUrl}, addr={str(address)[:40] if address else None}")
 
             return {
                 "Name": name,
@@ -834,7 +794,8 @@ class ScraperEngine:
                 "Total Reviews": totalReviews,
                 "Rating": rating,
             }
-        except Exception:
+        except Exception as e:
+            log.error(f"[PARSING] Exception: {type(e).__name__}: {e}")
             return None
 
     def scrape(self) -> list[dict]:
@@ -971,26 +932,28 @@ class ScraperEngine:
 
             self._screenshot()
 
-            feed_html = self.page.evaluate(
-                "() => { const el = document.querySelector(\"[role='feed']\"); return el ? el.outerHTML : ''; }"
-            )
-            log.warning(f"[SCRAPE] Feed HTML length: {len(feed_html)}")
-            if feed_html:
-                log.warning(f"[SCRAPE] Feed HTML preview: {feed_html[:500]}")
-
-            allResultsListSoup = BeautifulSoup(feed_html, "html.parser")
-            allResultsAnchorTags = allResultsListSoup.find_all("a", class_="hfpxzc")
-            log.warning(f"[SCRAPE] Links with class hfpxzc: {len(allResultsAnchorTags)}")
-
-            if len(allResultsAnchorTags) == 0:
-                all_anchors = allResultsListSoup.find_all("a")
-                log.warning(f"[SCRAPE] Total <a> tags in feed: {len(all_anchors)}")
-                for a in all_anchors[:5]:
-                    cls = a.get("class", [])
-                    href = a.get("href", "")[:80]
-                    log.warning(f"[SCRAPE]   <a class={' '.join(cls)} href={href}>")
-
-            allResultsLinks = [a.get("href") for a in allResultsAnchorTags if a.get("href")]
+            allResultsLinks = self.page.evaluate("""
+                () => {
+                    const feed = document.querySelector('[role="feed"]');
+                    if (!feed) return [];
+                    const links = Array.from(feed.querySelectorAll('a[href]'));
+                    return links
+                        .map(a => a.href)
+                        .filter(h => h && h.includes('/maps/place/') || h.includes('/maps/search/'));
+                }
+            """)
+            if not allResultsLinks:
+                allResultsLinks = self.page.evaluate("""
+                    () => {
+                        const feed = document.querySelector('[role="feed"]');
+                        if (!feed) return [];
+                        const links = Array.from(feed.querySelectorAll('a[href]'));
+                        return links.map(a => a.href).filter(h => h && h.startsWith('http'));
+                    }
+                """)
+            log.warning(f"[SCRAPE] Links found via JS: {len(allResultsLinks)}")
+            for link in allResultsLinks[:3]:
+                log.warning(f"[SCRAPE]   link: {link[:100]}")
 
             total_links = len(allResultsLinks)
             log.warning(f"[SCRAPE] Links found in feed: {total_links}")
