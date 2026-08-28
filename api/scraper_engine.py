@@ -703,7 +703,7 @@ class ScraperEngine:
             current_url = self.page.url
             log.warning(f"[PARSING] URL: {current_url}")
 
-            page_data = self.page.evaluate("""
+            page_data = self.page.evaluate(r"""
                 () => {
                     const result = {};
                     
@@ -1001,9 +1001,11 @@ class ScraperEngine:
                     log.error(f"[SCRAPE] Error on lead {i + 1}: {type(e).__name__}: {e}")
 
                 try:
-                    self.page.evaluate("() => { document.body.innerHTML = ''; }")
-                    self.page.goto("about:blank")
-                    self.page.evaluate("() => { if(window.gc) window.gc(); }")
+                    self.page.close()
+                except Exception:
+                    pass
+                try:
+                    self.page = self.browser.new_page()
                 except Exception:
                     pass
                 import gc
