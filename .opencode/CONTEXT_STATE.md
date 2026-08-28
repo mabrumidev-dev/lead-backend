@@ -25,6 +25,7 @@ durante o scraping por OOM.
 ## O QUE FUNCIONA
 - Scraper Google Maps: coleta links via JS, extrai dados via JS (sem CSS selectors)
 - **Fallback Google Search**: quando scraper falha, busca CNPJ no Google/Bing e obten dados via API Minha Receita
+- **Fallback no Enriquecimento**: quando CNPJ lookup falha (4 estratégias), busca CNPJ no Google como último recurso
 - Enriquecimento CNPJ (4 estratégias)
 - Redes sociais (Yahoo/DDG)
 - Plano de saúde (ANS + web search)

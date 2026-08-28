@@ -53,3 +53,9 @@ Execute: `.\scripts\auto-context.ps1`
 - Busca CNPJ no Google/Bing: "localize o cnpj da empresa {nome},{estado}"
 - Usa API Minha Receita para obter dados completos
 - Fluxo: Google Maps → FALHA → Google Search → CNPJ → Minha Receita → Dados
+
+### Fallback no Enriquecimento (COMPLEMENTO)
+- Quando as 4 estratégias de CNPJ lookup falham
+- Busca CNPJ no Google/Bing como último recurso
+- Retorna dados da API Minha Receita se encontrar CNPJ
+- Fluxo: Enriquecimento → 4 estratégias FALHAM → Google Search → CNPJ → Minha Receita → Dados
