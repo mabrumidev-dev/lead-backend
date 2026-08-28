@@ -47,3 +47,9 @@ Execute: `.\scripts\auto-context.ps1`
   - `document.querySelector('[data-item-id="address"]')` para endereço
   - `document.querySelector('a[href^="tel:"]')` para telefone
   - `document.querySelectorAll('a[href]')` para links do feed
+
+### Fallback Google Search (COMPLEMENTO, não substituição)
+- Quando scraper Google Maps falha (sem dados ou sem telefone)
+- Busca CNPJ no Google/Bing: "localize o cnpj da empresa {nome},{estado}"
+- Usa API Minha Receita para obter dados completos
+- Fluxo: Google Maps → FALHA → Google Search → CNPJ → Minha Receita → Dados
