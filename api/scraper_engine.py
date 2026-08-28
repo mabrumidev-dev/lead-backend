@@ -14,6 +14,39 @@ import base64
 import requests
 from typing import Callable, Optional
 
+DDD_MAP = {
+    "11": "São Paulo", "21": "Rio de Janeiro", "31": "Belo Horizonte",
+    "41": "Curitiba", "51": "Porto Alegre", "61": "Brasília",
+    "71": "Salvador", "81": "Recife", "85": "Fortaleza",
+    "86": "Teresina", "91": "Belém", "92": "Manaus",
+    "62": "Goiânia", "69": "Porto Velho", "95": "Boa Vista",
+    "63": "Palmas", "64": "Rio Verde", "65": "Cuiabá",
+    "66": "Rondonópolis", "67": "Campo Grande", "68": "Rio Branco",
+    "73": "Salvador", "74": "Juazeiro", "75": "Feira de Santana",
+    "77": "Vitória da Conquista", "79": "Aracaju", "82": "Maceió",
+    "83": "João Pessoa", "84": "Natal", "87": "Petrolina",
+    "88": "Juazeiro do Norte", "89": "Picos", "96": "Macapá",
+    "97": "São Gabriel da Cachoeira", "98": "São Luís", "99": "Imperatriz",
+}
+
+def _normalize_phone(phone: str) -> str:
+    if not phone:
+        return phone
+    digits = re.sub(r'\D', '', phone)
+    if digits.startswith('55') and len(digits) > 11:
+        digits = digits[2:]
+    if len(digits) == 10:
+        ddd = digits[:2]
+        if ddd in DDD_MAP:
+            return f"({ddd}) {digits[2:6]}-{digits[6:]}"
+        return f"({ddd}) {digits[2:6]}-{digits[6:]}"
+    if len(digits) == 11:
+        ddd = digits[:2]
+        if ddd in DDD_MAP:
+            return f"({ddd}) {digits[2:7]}-{digits[7:]}"
+        return f"({ddd}) {digits[2:7]}-{digits[7:]}"
+    return phone
+
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 except ImportError:
@@ -777,7 +810,7 @@ class ScraperEngine:
                 return None
 
             address = page_data.get("address")
-            phone = page_data.get("phone")
+            phone = _normalize_phone(page_data.get("phone"))
             websiteUrl = page_data.get("website")
             rating = page_data.get("rating")
             totalReviews = page_data.get("reviews")
