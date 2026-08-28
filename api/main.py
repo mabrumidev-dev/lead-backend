@@ -54,7 +54,10 @@ async def start_scrape(req: ScrapeRequest):
                 if progress >= 0: jobs[job_id]["progress"] = progress
     def run_scraper():
         import asyncio
+        import sys
         import logging
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         log = logging.getLogger("scraper")
