@@ -638,7 +638,7 @@ class ScraperEngine:
         self.search_query = search_query
         self.limit = limit
         self.on_progress = on_progress or (lambda msg, pct: None)
-        self.timeout = 60000
+        self.timeout = 15000
         self.browser = None
         self.page = None
         self._pw = None
@@ -668,7 +668,7 @@ class ScraperEngine:
         except Exception:
             pass
 
-    def _opening_url(self, url: str, max_retries: int = 3):
+    def _opening_url(self, url: str, max_retries: int = 2):
         retries = 0
         while retries < max_retries:
             if self._cancelled:
@@ -682,11 +682,11 @@ class ScraperEngine:
                 self.page.goto(url, timeout=self.timeout, wait_until="domcontentloaded")
             except PlaywrightTimeout:
                 retries += 1
-                sleep(3)
+                sleep(1)
                 continue
             except Exception:
                 retries += 1
-                sleep(3)
+                sleep(1)
                 continue
             else:
                 return True
