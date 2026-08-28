@@ -408,6 +408,79 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
     return None
 
 
+def _fallback_google_search(name: str, city: str = "", state: str = "") -> Optional[dict]:
+    """Fallback: search Google for CNPJ when scraper fails to get lead data."""
+    import logging
+    log = logging.getLogger("fallback")
+    
+    if not name:
+        return None
+    
+    clean_name = _clean_business_name(name)
+    if not clean_name:
+        return None
+    
+    query = f"localize o cnpj da empresa {clean_name}"
+    if state:
+        query += f",{state}"
+    elif city:
+        query += f",{city}"
+    
+    log.warning(f"[FALLBACK] Searching Google for: {query}")
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+    }
+    
+    cnpj = None
+    try:
+        resp = requests.get(
+            f"https://www.google.com/search?q={requests.utils.quote(query)}&hl=pt-BR",
+            timeout=10,
+            headers=headers
+        )
+        if resp.status_code == 200:
+            cnpj_matches = re.findall(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', resp.text)
+            for raw in cnpj_matches:
+                digits = re.sub(r'\D', '', raw)
+                if _is_valid_cnpj(digits):
+                    cnpj = digits
+                    log.warning(f"[FALLBACK] Found CNPJ: {raw}")
+                    break
+    except Exception as e:
+        log.error(f"[FALLBACK] Google search error: {e}")
+    
+    if not cnpj:
+        try:
+            resp = requests.get(
+                f"https://www.bing.com/search?q={requests.utils.quote(query)}",
+                timeout=8,
+                headers=headers
+            )
+            if resp.status_code == 200:
+                cnpj_matches = re.findall(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', resp.text)
+                for raw in cnpj_matches:
+                    digits = re.sub(r'\D', '', raw)
+                    if _is_valid_cnpj(digits):
+                        cnpj = digits
+                        log.warning(f"[FALLBACK] Found CNPJ via Bing: {raw}")
+                        break
+        except Exception as e:
+            log.error(f"[FALLBACK] Bing search error: {e}")
+    
+    if cnpj:
+        log.warning(f"[FALLBACK] Looking up CNPJ {cnpj} on Minha Receita...")
+        result = _lookup_cnpj_api(cnpj)
+        if result:
+            result["FallbackSource"] = "Google Search"
+            return result
+    
+    log.warning("[FALLBACK] No CNPJ found")
+    return None
+
+
 SOCIAL_NETWORKS = [
     {"name": "LinkedIn", "queries": [
         '"{name}" site:linkedin.com/in/',
@@ -840,6 +913,23 @@ class ScraperEngine:
 
             log.warning(f"[PARSING] parsed: name={name[:40]}, phone={phone}, website={websiteUrl}, addr={str(address)[:40] if address else None}")
 
+            if not phone:
+                log.warning(f"[PARSING] Phone empty, trying fallback Google Search...")
+                city_state = ""
+                if address:
+                    city_match = re.search(r'[-,]\s*([A-Z]{2})', address)
+                    if city_match:
+                        city_state = city_match.group(1)
+                fallback_data = _fallback_google_search(name, city="", state=city_state)
+                if fallback_data:
+                    if not phone:
+                        phone = _normalize_phone(fallback_data.get("telefone_1") or fallback_data.get("telefone_2"))
+                    if not address:
+                        address = fallback_data.get("endereco_completo") or f"{fallback_data.get('logradouro', '')}, {fallback_data.get('bairro', '')} - {fallback_data.get('municipio', '')} - {fallback_data.get('uf', '')}"
+                    if not websiteUrl:
+                        websiteUrl = fallback_data.get("email")
+                    log.warning(f"[PARSING] Fallback result: phone={phone}, addr={str(address)[:40] if address else None}")
+
             return {
                 "Name": name,
                 "Phone": phone,
@@ -1067,7 +1157,31 @@ class ScraperEngine:
                             final_data.append(data)
                             log.warning(f"[SCRAPE] Lead {len(final_data)}: {data.get('Name', 'N/A')}")
                         else:
-                            self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
+                            name_from_url = resultLink.split("/place/")[-1].split("/")[0].replace("+", " ") if "/place/" in resultLink else ""
+                            if name_from_url:
+                                log.warning(f"[SCRAPE] Parser failed, trying fallback for: {name_from_url[:50]}")
+                                state_match = re.search(r',\s*([A-Z]{2})', self.search_query)
+                                state = state_match.group(1) if state_match else ""
+                                fallback_data = _fallback_google_search(name_from_url, city="", state=state)
+                                if fallback_data:
+                                    lead = {
+                                        "Name": fallback_data.get("razao_social") or fallback_data.get("nome_fantasia") or name_from_url,
+                                        "Phone": _normalize_phone(fallback_data.get("telefone_1") or fallback_data.get("telefone_2")),
+                                        "Address": fallback_data.get("endereco_completo") or f"{fallback_data.get('logradouro', '')}, {fallback_data.get('bairro', '')} - {fallback_data.get('municipio', '')} - {fallback_data.get('uf', '')}",
+                                        "Website": None,
+                                        "Total Reviews": None,
+                                        "Rating": None,
+                                        "Link": resultLink,
+                                        "CNPJ": fallback_data.get("cnpj"),
+                                        "RazaoSocial": fallback_data.get("razao_social"),
+                                        "FallbackSource": "Google Search",
+                                    }
+                                    final_data.append(lead)
+                                    log.warning(f"[SCRAPE] Fallback Lead {len(final_data)}: {lead.get('Name', 'N/A')}")
+                                else:
+                                    self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
+                            else:
+                                self._msg(f"Pulando {i + 1}/{total_links} (sem dados)", progress)
                 except Exception as e:
                     self._msg(f"Erro no lead {i + 1}: {str(e)}", progress)
                     log.error(f"[SCRAPE] Error on lead {i + 1}: {type(e).__name__}: {e}")
