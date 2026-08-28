@@ -175,6 +175,7 @@ async def enrich_lead(data: dict):
     import logging
     import concurrent.futures
     log = logging.getLogger("enrich")
+    from scraper_engine import _fallback_google_search, _normalize_phone
     website, business_name, city, phone = data.get("website", ""), data.get("name", ""), data.get("city", ""), data.get("phone", "")
     log.warning(f"[ENRICH] Called: website={website} name={business_name} city={city} phone={phone}")
     try:
@@ -184,11 +185,62 @@ async def enrich_lead(data: dict):
             timeout=55.0,
         )
         log.warning(f"[ENRICH] Result: {'FOUND' if result else 'EMPTY'} cnpj={result.get('cnpj','') if result else ''}")
-        if result: return result
+        if result:
+            return result
     except asyncio.TimeoutError:
         log.error(f"[ENRICH] TIMEOUT after 55s for name={business_name}")
     except Exception as e:
         log.error(f"[ENRICH] Error: {type(e).__name__}: {e}")
+    
+    log.warning(f"[ENRICH] CNPJ lookup failed, trying fallback Google Search...")
+    try:
+        state = ""
+        if city:
+            state_match = re.search(r'([A-Z]{2})', city)
+            if state_match:
+                state = state_match.group(1)
+        fallback_result = await asyncio.wait_for(
+            loop.run_in_executor(None, _fallback_google_search, business_name, city, state),
+            timeout=30.0,
+        )
+        if fallback_result:
+            log.warning(f"[ENRICH] Fallback found CNPJ: {fallback_result.get('cnpj','')}")
+            return {
+                "responsavel": "", "socios": "",
+                "cnpj": fallback_result.get("cnpj", ""),
+                "razao_social": fallback_result.get("razao_social", ""),
+                "nome_fantasia": fallback_result.get("nome_fantasia", ""),
+                "situacao_cadastral": fallback_result.get("situacao_cadastral", ""),
+                "natureza_juridica": fallback_result.get("natureza_juridica", ""),
+                "porte": fallback_result.get("porte", ""),
+                "capital_social": fallback_result.get("capital_social", ""),
+                "atividade_principal": fallback_result.get("atividade_principal", ""),
+                "cnae_fiscal": fallback_result.get("cnae_fiscal", ""),
+                "cnaes_secundarios": fallback_result.get("cnaes_secundarios", []),
+                "opcao_simples": fallback_result.get("opcao_simples"),
+                "opcao_mei": fallback_result.get("opcao_mei"),
+                "regime_tributario": fallback_result.get("regime_tributario", []),
+                "situacao_especial": fallback_result.get("situacao_especial", ""),
+                "data_inicio_atividade": fallback_result.get("data_inicio_atividade", ""),
+                "identificador_matriz_filial": fallback_result.get("identificador_matriz_filial", ""),
+                "cep": fallback_result.get("cep", ""),
+                "uf": fallback_result.get("uf", ""),
+                "municipio": fallback_result.get("municipio", ""),
+                "bairro": fallback_result.get("bairro", ""),
+                "endereco_completo": fallback_result.get("endereco_completo", ""),
+                "telefone_1": fallback_result.get("telefone_1", ""),
+                "telefone_2": fallback_result.get("telefone_2", ""),
+                "fax": fallback_result.get("fax", ""),
+                "email": fallback_result.get("email", ""),
+                "qsa": fallback_result.get("qsa", []),
+                "entidade_federativa": fallback_result.get("entidade_federativa", ""),
+                "codigo_municipio_ibge": fallback_result.get("codigo_municipio_ibge", ""),
+                "data_opcao_simples": fallback_result.get("data_opcao_simples", ""),
+                "data_situacao_cadastral": fallback_result.get("data_situacao_cadastral", ""),
+                "motivo_situacao": fallback_result.get("motivo_situacao", ""),
+            }
+    except Exception as e:
+        log.error(f"[ENRICH] Fallback error: {type(e).__name__}: {e}")
     return {"responsavel": "", "socios": "", "cnpj": "", "razao_social": "", "nome_fantasia": "", "situacao_cadastral": "", "natureza_juridica": "", "porte": "", "capital_social": "", "atividade_principal": "", "cnae_fiscal": "", "cnaes_secundarios": [], "opcao_simples": None, "opcao_mei": None, "regime_tributario": [], "situacao_especial": "", "data_inicio_atividade": "", "identificador_matriz_filial": "", "cep": "", "uf": "", "municipio": "", "bairro": "", "endereco_completo": "", "telefone_1": "", "telefone_2": "", "fax": "", "email": "", "responsavel": "", "socios": "", "qsa": [], "entidade_federativa": "", "codigo_municipio_ibge": "", "data_opcao_simples": "", "data_situacao_cadastral": "", "motivo_situacao": ""}
 
 @app.post("/api/social-search")
