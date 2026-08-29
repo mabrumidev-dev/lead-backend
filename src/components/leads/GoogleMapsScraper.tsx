@@ -590,6 +590,10 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
                         </div>
                       ) : r.Socios ? (
                         <div className="text-slate-400 text-xs">{r.Socios}</div>
+                      ) : r.NomeFantasia || r.RazaoSocial ? (
+                        <div className="text-cyan-400 text-xs">
+                          <Building2 size={11} className="inline mr-1" />{r.NomeFantasia || r.RazaoSocial}
+                        </div>
                       ) : enrichedNames.has(r.Name) ? (
                         <span className="text-red-400/70 text-xs italic">Não Localizado</span>
                       ) : (
