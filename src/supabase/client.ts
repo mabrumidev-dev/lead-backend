@@ -7,7 +7,14 @@ const runtimeConfig = win.__SUPABASE_CONFIG__ || {}
 const supabaseUrl = runtimeConfig.url || import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.com'
 const supabaseKey = runtimeConfig.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  }
+})
 
 export type Database = {
   public: {

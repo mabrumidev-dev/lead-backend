@@ -123,6 +123,22 @@ export default function App() {
     supabase.auth.getSession().then(({ data }: any) => {
       if (data.session) { setIsLogged(true); setUserId(data.session.user.id); }
     });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED' && session) {
+        console.log('[AUTH] Token refreshed successfully')
+      }
+      if (event === 'SIGNED_OUT') {
+        setIsLogged(false)
+        setUserId(null)
+      }
+      if (event === 'SIGNED_IN' && session) {
+        setIsLogged(true)
+        setUserId(session.user.id)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, []);
 
   const handleLogin = async (email: string, password: string) => {
