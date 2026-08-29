@@ -314,7 +314,6 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
           name: r.Name || '',
           email: r.Email || '',
           phone: telefone,
-          age: null,
           city: extractCity(r.Address),
           plan: 'Individual' as const,
           status: 'new' as const,

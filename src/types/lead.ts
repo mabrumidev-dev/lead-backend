@@ -3,7 +3,7 @@ export interface Lead {
   name: string
   email: string
   phone: string
-  age: number | null
+  age?: number | null
   city: string
   plan: 'Individual' | 'Empresarial' | 'Grupo'
   status: 'new' | 'contacted' | 'qualified'
