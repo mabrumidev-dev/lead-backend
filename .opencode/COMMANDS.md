@@ -4,7 +4,7 @@
 Para iniciar nova sessão com contexto completo, digite:
 
 ```
-Leia .opencode/CONTEXT_STATE.md e continue de onde paramos
+Leia .opencode/CONTEXT_STATE.md e .opencode/COMMANDS.md. Retome o projeto mabrumi-crm-pro de onde paramos. Último commit: 5d8b3bc.
 ```
 
 ## Outros Comandos Úteis
@@ -48,14 +48,20 @@ Execute: `.\scripts\auto-context.ps1`
   - `document.querySelector('a[href^="tel:"]')` para telefone
   - `document.querySelectorAll('a[href]')` para links do feed
 
-### Fallback Google Search (COMPLEMENTO, não substituição)
-- Quando scraper Google Maps falha (sem dados ou sem telefone)
-- Busca CNPJ no Google/Bing: "localize o cnpj da empresa {nome},{estado}"
-- Usa API Minha Receita para obter dados completos
-- Fluxo: Google Maps → FALHA → Google Search → CNPJ → Minha Receita → Dados
+### Busca de CNPJ por nome - LIMITAÇÃO CONHECIDA
+- **Google, Bing, DuckDuckGo, Yahoo, Brave** bloqueiam requests automatizados
+- **Playwright headless** também é bloqueado pelo Google
+- Não existe API gratuita para busca de CNPJ por nome
+- As 4 estratégias de enriquecimento (website, Bing, diretórios, Google Translate) funcionam para a maioria dos negócios
+- Negócios muito pequenos (só Instagram) podem não ter CNPJ encontrado
 
-### Fallback no Enriquecimento (COMPLEMENTO)
-- Quando as 4 estratégias de CNPJ lookup falham
-- Busca CNPJ no Google/Bing como último recurso
-- Retorna dados da API Minha Receita se encontrar CNPJ
-- Fluxo: Enriquecimento → 4 estratégias FALHAM → Google Search → CNPJ → Minha Receita → Dados
+### Supabase Auth
+- Token refresh pode retornar 400 se JWT expiry estiver muito baixo
+- Verificar no Dashboard: Authentication > Settings > JWT Time Limit (recomendado: 3600)
+- Verificar: Refresh Token Rotation (recomendado: desativar se problema persistir)
+- Listener onAuthStateChange adicionado no App.tsx para refresh automático
+
+### Tabela de Leads
+- Quando Responsavel está vazio, mostra NomeFantasia ou RazaoSocial (cor ciano)
+- Campo `age` é opcional no tipo Lead (não existe na tabela Supabase 'leads')
+- Campo `idade` existe na tabela Supabase 'base_leads'
