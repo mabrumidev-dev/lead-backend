@@ -1,0 +1,13 @@
+# Normaliza line endings para LF no repositório
+* text=auto eol=lf
+
+# Binários não devem ser convertidos
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

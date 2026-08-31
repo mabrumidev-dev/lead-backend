@@ -3,7 +3,7 @@ Projeto: React+Vite frontend, FastAPI backend, Supabase DB, Render deploy.
 
 ## Funcionalidades
 - Google Maps Scraper com enriquecimento (CNPJ, redes sociais, plano saude, funcionarios)
-- Vision AI: upload de imagem para extracao de dados via Groq/Qwen 3.6 27B
+- Vision AI: upload de imagem para extracao de dados via MiMo V2.5 Pro
 - Base de leads com status (new/contacted/qualified)
 - Disparo WhatsApp em massa
 - Importacao CSV
@@ -13,8 +13,8 @@ Projeto: React+Vite frontend, FastAPI backend, Supabase DB, Render deploy.
 - Backend: FastAPI + Playwright (Python 3.11)
 - DB: Supabase (PostgreSQL)
 - Deploy: Render (Docker, 512MB RAM)
-- IA Vision: Groq API (qwen/qwen3.6-27b)
+- IA Vision: MiMo API (mimo-v2.5-pro)
 
 ## Ambiente
-- GROQ_API_KEY necessaria no Render para vision
+- MIMO_API_KEY necessaria no Render para vision
 - .env.local para desenvolvimento local
