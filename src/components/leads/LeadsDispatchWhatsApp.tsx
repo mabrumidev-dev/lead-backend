@@ -116,35 +116,49 @@ export const LeadsDispatchWhatsApp: React.FC<{
       pending: leadsToDispatch.length
     })
 
-    // Simulate sending messages
     let sent = 0
     let failed = 0
 
+    const apiBase = import.meta.env.VITE_API_URL || window.location.origin
+
     for (const lead of leadsToDispatch) {
       try {
-        // Simulate API call delay
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        // 80% success rate simulation
-        const success = Math.random() > 0.2
-        
-        if (success) {
+        const personalizedMsg = personalizeMessage(message, lead)
+        const response = await fetch(`${apiBase}/api/whatsapp/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: lead.phone,
+            message: personalizedMsg,
+            leadId: lead.id
+          })
+        })
+
+        if (response.ok) {
           sent++
-          // Update lead status to contacted
           onStatusChange(lead.id, 'contacted')
         } else {
           failed++
+          console.warn(`[WhatsApp] Falha ao enviar para ${lead.phone}: ${response.status}`)
         }
       } catch (error) {
         failed++
+        console.error(`[WhatsApp] Erro ao enviar para ${lead.phone}:`, error)
       }
+
+      // Atualizar stats em tempo real
+      setDispatchStats(prev => ({
+        ...prev,
+        sent,
+        failed,
+        pending: prev.pending - 1
+      }))
     }
 
     setDispatchStats({ total: leadsToDispatch.length, sent, failed, pending: 0 })
     setIsSending(false)
     setShowConfirmation(true)
 
-    // Clear selection after delay
     setTimeout(() => {
       setSelectedLeads(new Set())
       setMessage('')

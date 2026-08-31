@@ -61,7 +61,7 @@ export const useLeads = (customFilters?: FilterOptions) => {
 
   useEffect(() => {
     fetchLeads()
-  }, [filters, customFilters?.city, customFilters?.plan, customFilters?.minAge, customFilters?.maxAge])
+  }, [customFilters?.city, customFilters?.plan, customFilters?.minAge, customFilters?.maxAge])
 
   return {
     leads,

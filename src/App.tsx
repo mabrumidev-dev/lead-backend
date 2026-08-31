@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Component, type ReactNode } from 'react'
 import { Search, Users, Send, LogOut, Shield, Target, Database, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu } from 'lucide-react'
 import { useLeads } from './hooks/useLeads'
 import { useBaseLeads } from './hooks/useBaseLeads'
@@ -69,25 +69,54 @@ function ParallaxBackground({ scrollY }: { scrollY: number }) {
 function Login({ onLogin }: { onLogin: (email: string, password: string) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
   const [scrollY, setScrollY] = useState(0)
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY)
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+  const handleSubmit = () => {
+    setError('')
+    if (!email.trim()) { setError('Informe o email'); return }
+    if (!password.trim()) { setError('Informe a senha'); return }
+    onLogin(email, password)
+  }
   return (
     <div className="min-h-screen bg-[#050A1A] flex items-center justify-center p-4 relative overflow-hidden">
       <ParallaxBackground scrollY={scrollY} />
       <div className="w-full max-w-lg relative z-20 text-center">
         <h2 className="text-3xl font-bold text-white mb-3">MABRUMI CRM</h2>
         <div className="bg-slate-900/60 border-slate-800 rounded-2xl p-8 backdrop-blur-2xl text-left">
-          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-800 border-slate-700 rounded-lg px-4 py-3 text-white mb-4 outline-none" />
-          <input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-800 border-slate-700 rounded-lg px-4 py-3 text-white mb-6 outline-none" />
-          <button onClick={() => onLogin(email, password)} className="w-full bg-cyan-500 text-white font-bold py-3 rounded-lg">Acessar Plataforma</button>
+          {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+          <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSubmit()} className="w-full bg-slate-800 border-slate-700 rounded-lg px-4 py-3 text-white mb-4 outline-none" />
+          <input type="password" placeholder="Senha" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSubmit()} className="w-full bg-slate-800 border-slate-700 rounded-lg px-4 py-3 text-white mb-6 outline-none" />
+          <button onClick={handleSubmit} className="w-full bg-cyan-500 text-white font-bold py-3 rounded-lg">Acessar Plataforma</button>
         </div>
       </div>
     </div>
   )
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  state = { hasError: false, error: '' }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#050A1A] flex items-center justify-center p-4">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-red-400 mb-4">Algo deu errado</h2>
+            <p className="text-slate-400 mb-4">{this.state.error}</p>
+            <button onClick={() => window.location.reload()} className="bg-cyan-500 text-white px-6 py-2 rounded-lg">Recarregar</button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 function ToastContainer({ toasts, onRemove }: { toasts: any[]; onRemove: (id: number) => void }) {
@@ -103,7 +132,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: any[]; onRemove: (id: nu
   )
 }
 
-export default function App() {
+function App() {
   const [isLogged, setIsLogged] = useState<boolean>(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'buscar' | 'base' | 'disparo' | 'importar' | 'scraper'>('buscar')
@@ -197,7 +226,7 @@ export default function App() {
   if (!isLogged) return <Login onLogin={handleLogin} />;
 
   return (
-    <>
+    <ErrorBoundary>
       <ToastContainer toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
       <div className="flex min-h-screen bg-[#050A1A] text-white">
         <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900 p-4 flex-col transform transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
@@ -217,6 +246,8 @@ export default function App() {
           {getTabContent()}
         </main>
       </div>
-    </>
+    </ErrorBoundary>
   )
 }
+
+export default App

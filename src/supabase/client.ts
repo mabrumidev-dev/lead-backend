@@ -1,20 +1,27 @@
-// @ts-nocheck
 import { createClient } from '@supabase/supabase-js'
 
 const win = (typeof window !== 'undefined' ? (window as any) : {})
 const runtimeConfig = win.__SUPABASE_CONFIG__ || {}
 
-const supabaseUrl = runtimeConfig.url || import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.com'
-const supabaseKey = runtimeConfig.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
+const supabaseUrl = runtimeConfig.url || import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = runtimeConfig.anonKey || import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
+if (!supabaseUrl || !supabaseKey) {
+  console.error('[Supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configuradas. Verifique o .env')
+}
+
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseKey || 'placeholder',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+    }
   }
-})
+)
 
 export type Database = {
   public: {

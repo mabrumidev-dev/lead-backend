@@ -311,14 +311,14 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
         }
         return {
           id: crypto.randomUUID(),
-          name: r.Name || '',
+          nome: r.Name || '',
           email: r.Email || '',
-          phone: telefone,
-          city: extractCity(r.Address),
-          plan: 'Individual' as const,
+          telefone: telefone,
+          cidade: extractCity(r.Address),
+          nicho: 'Individual',
           status: 'new' as const,
           score: calculateScore(r.Rating, r['Total Reviews']),
-          source: 'Google Maps' as const,
+          fonte: 'Google Maps',
           created_at: new Date().toISOString(),
         }
       })

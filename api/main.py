@@ -21,9 +21,11 @@ from scraper_engine import ScraperEngine, lookup_cnpj, search_social_media, chec
 
 app = FastAPI(title="Mabrumi Scraper API", version="1.0.0")
 
+ALLOWED_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -134,21 +136,24 @@ async def analyze_vision(file: UploadFile = File(...)):
     import os
     contents = await file.read()
     base64_image = base64.b64encode(contents).decode('utf-8')
-    api_key = os.environ.get("GROQ_API_KEY", "")
+    api_key = os.environ.get("MIMO_API_KEY")
+    if not api_key:
+        raise Exception("MIMO_API_KEY não configurada no ambiente")
+    mimo_base = os.environ.get("MIMO_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1")
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
+            f"{mimo_base}/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
             json={
-                "model": "qwen/qwen3.6-27b",
+                "model": "mimo-v2.5-pro",
                 "messages": [
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Extract all contact data from this image. Return ONLY a valid JSON object with these exact keys: name, website, city, cnpj, email. Do not include any markdown or explanation. Keep thinking extremely concise (less than 10 words)."},
+                            {"type": "text", "text": "Extract all contact data from this image. Return ONLY a valid JSON object with these exact keys: name, website, city, cnpj, email. Do not include any markdown or explanation."},
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                         ]
                     }
@@ -206,7 +211,8 @@ async def enrich_lead(data: dict):
         if fallback_result:
             log.warning(f"[ENRICH] Fallback found CNPJ: {fallback_result.get('cnpj','')}")
             return {
-                "responsavel": "", "socios": "",
+                "responsavel": fallback_result.get("responsavel", ""),
+                "socios": fallback_result.get("socios", ""),
                 "cnpj": fallback_result.get("cnpj", ""),
                 "razao_social": fallback_result.get("razao_social", ""),
                 "nome_fantasia": fallback_result.get("nome_fantasia", ""),
@@ -241,7 +247,7 @@ async def enrich_lead(data: dict):
             }
     except Exception as e:
         log.error(f"[ENRICH] Fallback error: {type(e).__name__}: {e}")
-    return {"responsavel": "", "socios": "", "cnpj": "", "razao_social": "", "nome_fantasia": "", "situacao_cadastral": "", "natureza_juridica": "", "porte": "", "capital_social": "", "atividade_principal": "", "cnae_fiscal": "", "cnaes_secundarios": [], "opcao_simples": None, "opcao_mei": None, "regime_tributario": [], "situacao_especial": "", "data_inicio_atividade": "", "identificador_matriz_filial": "", "cep": "", "uf": "", "municipio": "", "bairro": "", "endereco_completo": "", "telefone_1": "", "telefone_2": "", "fax": "", "email": "", "responsavel": "", "socios": "", "qsa": [], "entidade_federativa": "", "codigo_municipio_ibge": "", "data_opcao_simples": "", "data_situacao_cadastral": "", "motivo_situacao": ""}
+    return {"responsavel": "", "socios": "", "cnpj": "", "razao_social": "", "nome_fantasia": "", "situacao_cadastral": "", "natureza_juridica": "", "porte": "", "capital_social": "", "atividade_principal": "", "cnae_fiscal": "", "cnaes_secundarios": [], "opcao_simples": None, "opcao_mei": None, "regime_tributario": [], "situacao_especial": "", "data_inicio_atividade": "", "identificador_matriz_filial": "", "cep": "", "uf": "", "municipio": "", "bairro": "", "endereco_completo": "", "telefone_1": "", "telefone_2": "", "fax": "", "email": "", "qsa": [], "entidade_federativa": "", "codigo_municipio_ibge": "", "data_opcao_simples": "", "data_situacao_cadastral": "", "motivo_situacao": ""}
 
 @app.post("/api/social-search")
 async def social_search(data: dict):
