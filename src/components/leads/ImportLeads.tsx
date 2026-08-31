@@ -168,12 +168,9 @@ export const ImportLeads: React.FC<ImportLeadsProps> = ({ onImportComplete, onBa
         const { error } = await supabase.from('leads').insert({
           nome: lead.name,
           telefone: lead.phone,
-          email: lead.email || null,
           cidade: lead.city || null,
-          nicho: lead.plan,
-          fonte: 'zubdata',
+          plano: lead.plan,
           score: lead.score,
-          status: 'new',
         })
 
         if (error) throw error

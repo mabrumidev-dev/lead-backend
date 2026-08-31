@@ -312,13 +312,10 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
         return {
           id: crypto.randomUUID(),
           nome: r.Name || '',
-          email: r.Email || '',
           telefone: telefone,
           cidade: extractCity(r.Address),
-          nicho: 'Individual',
-          status: 'new' as const,
+          plano: 'Individual',
           score: calculateScore(r.Rating, r['Total Reviews']),
-          fonte: 'Google Maps',
           created_at: new Date().toISOString(),
         }
       })
