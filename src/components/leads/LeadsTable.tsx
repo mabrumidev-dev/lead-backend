@@ -1,22 +1,6 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import { Lead } from '@/types/lead'
-import { 
-  Heart, 
-  ArrowDownUp, 
-  ShieldCheck, 
-  XCircle,
-  Users,
-  Phone,
-  Shield,
-  Target,
-  Palette,
-  Eye,
-  Info,
-  CheckCircle,
-  Search,
-  Download,
-} from 'lucide-react'
-import { LinkedInIcon, InstagramIcon, FacebookIcon, XIcon } from '@/components/SocialIcons'
+import { Search, Download, Eye, ShieldCheck, XCircle, ArrowDownUp, ChevronDown, Filter } from 'lucide-react'
 
 interface LeadsTableProps {
   leads: any[]
@@ -30,14 +14,7 @@ interface LeadsTableProps {
 }
 
 export const LeadsTable: React.FC<LeadsTableProps> = ({
-  leads,
-  loading,
-  error,
-  refetch,
-  onAddToBase,
-  onDelete,
-  onDeleteMultiple,
-  baseLeadIds = []
+  leads, loading, error, refetch, onAddToBase, onDelete, onDeleteMultiple, baseLeadIds = []
 }) => {
   const [search, setSearch] = useState('')
   const [viewLead, setViewLead] = useState<any>(null)
@@ -64,457 +41,264 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
   }
 
   const toggleSelectAll = () => {
-    if (selected.size === filteredLeads.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filteredLeads.map((l: any) => l.id)))
-    }
+    if (selected.size === filteredLeads.length) setSelected(new Set())
+    else setSelected(new Set(filteredLeads.map((l: any) => l.id)))
   }
 
-  const selectedLeads = useMemo(
-    () => filteredLeads.filter((l: any) => selected.has(l.id)),
-    [filteredLeads, selected]
-  )
-
-  const transformedLeads = filteredLeads.map((lead) => ({
-    ...lead,
-    ageDisplay: (lead.age || lead.idade) ? `${lead.age || lead.idade} anos` : 'Não informado',
-    scoreDisplay: lead.score ? `${lead.score}%` : 'N/A',
-    statusColor: {
-      new: 'text-red-400',
-      contacted: 'text-yellow-400',
-      qualified: 'text-green-400'
-    }[lead.status as 'new' | 'contacted' | 'qualified'] || 'text-slate-400',
-    leadName: lead.name || lead.nome || 'Lead sem nome',
-    leadEmail: lead.email || (lead.endereco ? `/${lead.endereco.substring(0, 20)}` : 'N/A'),
-    leadPhone: lead.phone || lead.telefone || '(00) 0000-0000',
-    leadPlan: lead.plan || lead.nicho || 'Não informado',
-    leadCity: lead.city || lead.cidade || '',
-  }))
+  const exportCSV = () => {
+    const headers = ['Nome','Telefone','Cidade','Plano','Score','Status']
+    const rows = filteredLeads.map((l: any) => [
+      l.name || l.nome || '', l.phone || l.telefone || '', l.city || l.cidade || '',
+      l.plan || l.nicho || '', String(l.score || ''), l.status || 'new'
+    ])
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `leads_mabrumi_${new Date().toISOString().split('T')[0]}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
 
   if (loading) {
     return (
-      <div className="h-64 bg-slate-900/50 rounded-xl flex items-center justify-center">
-        <span className="text-slate-500">Carregando leads...</span>
+      <div className="glass p-12">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-2 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
+          <p className="text-sm text-slate-500">Carregando leads...</p>
+        </div>
       </div>
     )
   }
 
   if (error && leads.length === 0) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-red-400">Erro: {error}</p>
-        <button onClick={refetch} className="mt-2 text-cyan-400 hover:underline">
-          Tentar novamente
-        </button>
+      <div className="glass p-8 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto mb-4">
+          <XCircle size={28} className="text-rose-400" />
+        </div>
+        <p className="text-rose-400 font-medium mb-2">Erro ao carregar</p>
+        <p className="text-slate-500 text-sm mb-4">{error}</p>
+        <button onClick={refetch} className="btn-ghost">Tentar novamente</button>
       </div>
     )
   }
 
   if (leads.length === 0) {
     return (
-      <div className="p-4 sm:p-8 text-center">
-        <p className="text-slate-500 text-lg">Nenhum lead encontrado.</p>
-        <p className="text-slate-500 mt-2">Os leads do seu Supabase devem aparecer abaixo.</p>
+      <div className="glass p-12 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center mx-auto mb-4">
+          <Search size={32} className="text-slate-600" />
+        </div>
+        <p className="text-lg text-slate-400 mb-2">Nenhum lead encontrado</p>
+        <p className="text-sm text-slate-600">Use os filtros acima ou importe leads via CSV</p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="space-y-4">
+      {/* Warning */}
       {error && (
-        <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm">
-          ⚠️ {error}
+        <div className="glass-sm p-3 border-amber-500/20 flex items-center gap-3 text-amber-400 text-sm">
+          <span>⚠️</span>
+          <span>{error}</span>
         </div>
       )}
-      <div className="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             placeholder="Buscar por nome, telefone ou cidade..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full bg-slate-800/50 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
+            className="input-field input-field-with-icon"
           />
         </div>
         <div className="flex items-center gap-2">
-        {search && (
-          <button onClick={() => setSearch('')} className="text-slate-400 hover:text-white text-sm">
-            Limpar
+          {search && (
+            <button onClick={() => setSearch('')} className="btn-ghost text-xs px-3 py-2">
+              Limpar
+            </button>
+          )}
+          <span className="text-xs text-slate-500 px-2">{filteredLeads.length} de {leads.length}</span>
+          <button onClick={exportCSV} className="btn-ghost flex items-center gap-2 px-3 py-2">
+            <Download size={14} />
+            <span className="text-xs">CSV</span>
           </button>
-        )}
-        <span className="text-xs text-slate-500">{filteredLeads.length} de {leads.length}</span>
-        <button
-          onClick={() => {
-            const headers = ['Nome','Telefone','Cidade','Plano','Score','Status']
-            const rows = filteredLeads.map((l: any) => [
-              l.name || l.nome || '',
-              l.phone || l.telefone || '',
-              l.city || l.cidade || '',
-              l.plan || l.nicho || '',
-              String(l.score || ''),
-              l.status || 'new'
-            ])
-            const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `leads_mabrumi_${new Date().toISOString().split('T')[0]}.csv`
-            a.click()
-            URL.revokeObjectURL(url)
-          }}
-          className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 text-slate-400 hover:text-cyan-400 transition"
-          title="Exportar CSV"
-        >
-          <Download size={16} />
-        </button>
         </div>
       </div>
+
+      {/* Selection bar */}
       {selected.size > 0 && (
-        <div className="mb-3 flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
+        <div className="glass-sm p-3 border-cyan-500/20 flex flex-col sm:flex-row items-start sm:items-center gap-3 animate-scale-in">
           <span className="text-sm text-cyan-400 font-medium">{selected.size} selecionado(s)</span>
-          <div className="flex gap-2 sm:ml-auto flex-wrap">
-            <button
-              onClick={() => {
-                const csv = selectedLeads.map((l: any) => [
-                  l.name || l.nome || '', l.phone || l.telefone || '', l.city || l.cidade || '',
-                  l.plan || l.nicho || '', String(l.score || ''), l.status || 'new'
-                ])
-                const headers = ['Nome','Telefone','Cidade','Plano','Score','Status']
-                const file = [headers, ...csv].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-                const blob = new Blob([file], { type: 'text/csv;charset=utf-8;' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a'); a.href = url
-                a.download = `leads_selecionados_${new Date().toISOString().split('T')[0]}.csv`
-                a.click(); URL.revokeObjectURL(url)
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 hover:bg-emerald-600/30 transition-colors text-xs font-medium"
-            ><Download size={13} /> CSV</button>
-            <button
-              onClick={() => {
-                if (confirm(`Excluir ${selected.size} lead(s) selecionados?`)) {
-                  onDeleteMultiple?.(Array.from(selected))
-                  setSelected(new Set())
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-600/30 text-red-400 hover:bg-red-600/30 transition-colors text-xs font-medium"
-            ><XCircle size={13} /> Excluir</button>
-            <button
-              onClick={() => setSelected(new Set())}
-              className="px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-400 hover:text-white transition-colors text-xs"
-            >Limpar</button>
+          <div className="flex gap-2 sm:ml-auto">
+            <button onClick={() => {
+              const csv = filteredLeads.filter((l: any) => selected.has(l.id)).map((l: any) => [
+                l.name || '', l.phone || '', l.city || '', l.plan || '', String(l.score || ''), l.status || ''
+              ])
+              const headers = ['Nome','Telefone','Cidade','Plano','Score','Status']
+              const file = [headers, ...csv].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+              const blob = new Blob([file], { type: 'text/csv;charset=utf-8;' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a'); a.href = url
+              a.download = `leads_selecionados.csv`; a.click(); URL.revokeObjectURL(url)
+            }} className="btn-success text-xs flex items-center gap-1.5">
+              <Download size={13} /> Exportar
+            </button>
+            <button onClick={() => {
+              if (confirm(`Excluir ${selected.size} lead(s)?`)) {
+                onDeleteMultiple?.(Array.from(selected))
+                setSelected(new Set())
+              }
+            }} className="btn-danger text-xs flex items-center gap-1.5">
+              <XCircle size={13} /> Excluir
+            </button>
+            <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs">
+              Limpar
+            </button>
           </div>
         </div>
       )}
-      <table className="w-full min-w-table">
-        <thead className="border-b border-slate-800/50">
-          <tr className="text-slate-400 text-xs uppercase">
-            <th className="py-3 px-3 w-10">
-              <input
-                type="checkbox"
-                checked={filteredLeads.length > 0 && selected.size === filteredLeads.length}
-                onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
-              />
-            </th>
-            <th className="py-3 px-4 text-left">Lead</th>
-            <th className="py-3 px-4 text-left">Contato</th>
-            <th className="py-3 px-4 text-left">Idade</th>
-            <th className="py-3 px-4 text-left">Plano/Nicho</th>
-            <th className="py-3 px-4 text-left">Score</th>
-            <th className="py-3 px-4 text-center">Ações</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-800/50">
-          {transformedLeads.map((lead) => (
-            <tr key={lead.id} className={`hover:bg-slate-900/30 transition-colors ${selected.has(lead.id) ? 'bg-cyan-500/5' : ''}`}>
-              <td className="py-3 px-3">
-                <input
-                  type="checkbox"
-                  checked={selected.has(lead.id)}
-                  onChange={() => toggleSelect(lead.id)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
-                />
-              </td>
-              <td className="py-3 px-4">
-                <div>
-                  <p className="font-medium text-white">{lead.leadName || lead.nome || 'Lead'}</p>
-                  <p className="text-xs text-slate-500">{lead.leadEmail || 'Sem email'}</p>
-                </div>
-              </td>
-              <td className="py-3 px-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-cyan-400">📞</span>
-                  <a href={`tel:${lead.leadPhone || '000000000'}`} className="text-cyan-400 hover:underline text-sm">
-                    {lead.leadPhone || '000000000'}
-                  </a>
-                </div>
-              </td>
-              <td className="py-3 px-4">
-                <span className={`text-slate-400 font-medium ${lead.ageDisplay}`}>
-                  {lead.ageDisplay}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                <span className={`px-2 py-1 rounded text-xs ${lead.leadPlan === 'restaurante' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                  {lead.leadPlan || lead.nicho || 'Não informado'}
-                </span>
-              </td>
-              <td className="py-3 px-4">
-                <span className={`text-${lead.score >= 75 ? 'green' : lead.score >= 50 ? 'yellow' : 'red'}-400 font-medium`}>
-                  {lead.scoreDisplay}
-                </span>
-              </td>
-              <td className="py-3 px-4 text-center">
-                <div className="flex gap-2 justify-center">
-                  <button
-                    onClick={() => setViewLead(lead)}
-                    title="Ver detalhes"
-                    className="p-1 rounded bg-slate-800/50 hover:bg-cyan-500/20 transition-colors text-cyan-400"
-                  >
-                    <Eye size={14} />
-                  </button>
-                  <button
-                    onClick={refetch}
-                    title="Atualizar"
-                    className="p-1 rounded hover:bg-slate-800/50 transition-colors"
-                  >
-                    <ArrowDownUp size={14} />
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!baseLeadIds.includes(lead.id)) {
-                        onAddToBase?.(lead)
-                      }
-                    }}
-                    title={baseLeadIds.includes(lead.id) ? 'Já está na base' : 'Adicionar base'}
-                    className={`p-1 rounded transition-colors ${baseLeadIds.includes(lead.id) ? 'bg-green-500/20 text-green-400' : 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400'}`}
-                  >
-                    <ShieldCheck size={14} />
-                  </button>
-                  <button
-                    onClick={() => onDelete?.(lead.id)}
-                    title="Excluir lead"
-                    className="p-1 rounded bg-slate-800/50 hover:bg-red-500/20 transition-colors text-red-400"
-                  >
-                    <XCircle size={14} className="text-red-400" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
 
-      {viewLead && (() => {
-        const phoneKey = (viewLead.phone || viewLead.telefone || '').replace(/\D/g, '')
-        const enriched = JSON.parse(localStorage.getItem('mabrumi_enriched_leads') || '{}')[phoneKey] || null
-        const fmtCNPJ = (v: string) => {
-          if (!v) return null
-          const d = v.replace(/\D/g, '')
-          if (d.length === 14) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`
-          return v
-        }
-        const fmtCurrency = (v: any) => {
-          if (v === null || v === undefined || v === '') return null
-          return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-        }
-        return (
-          <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-8 pb-4 sm:pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setViewLead(null)}>
-            <div className="relative w-full max-w-5xl mx-2 sm:mx-4 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setViewLead(null)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors z-10">
-                <XCircle size={18} />
-              </button>
-              <div className="p-5 max-h-[85vh] overflow-y-auto">
-                <h2 className="text-lg font-bold text-cyan-400 mb-1 pr-8">{viewLead.name || viewLead.nome || 'Lead'}</h2>
-                <p className="text-xs text-slate-500 mb-4">Dados do lead</p>
+      {/* Table */}
+      <div className="glass overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="w-12">
+                  <input type="checkbox" checked={filteredLeads.length > 0 && selected.size === filteredLeads.length} onChange={toggleSelectAll} />
+                </th>
+                <th>Lead</th>
+                <th>Contato</th>
+                <th>Cidade</th>
+                <th>Plano</th>
+                <th>Score</th>
+                <th className="text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLeads.map((lead: any) => {
+                const isSelected = selected.has(lead.id)
+                const isBase = baseLeadIds.includes(lead.id)
+                const name = lead.name || lead.nome || 'Lead sem nome'
+                const phone = lead.phone || lead.telefone || ''
+                const city = lead.city || lead.cidade || ''
+                const plan = lead.plan || lead.nicho || 'Individual'
+                const score = lead.score || 0
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Telefone</p><p className="text-sm text-slate-200">📞 {viewLead.phone || viewLead.telefone || 'Não informado'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Email</p><p className="text-sm text-slate-200">✉️ {enriched?.Email || viewLead.email || 'Não informado'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Cidade</p><p className="text-sm text-slate-200">📍 {viewLead.city || viewLead.cidade || 'Não informado'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Idade</p><p className="text-sm text-slate-200">👤 {viewLead.age || viewLead.idade ? `${viewLead.age || viewLead.idade} anos` : 'Não informado'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Plano/Nicho</p><p className="text-sm text-slate-200">🏷️ {viewLead.plan || viewLead.nicho || 'Não informado'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Score</p><p className="text-sm text-slate-200">⭐ {viewLead.score ? `${viewLead.score}%` : 'N/A'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Fonte</p><p className="text-sm text-slate-200">📥 {viewLead.source || viewLead.fonte || 'Não informado'}</p></div>
-                  <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Criado em</p><p className="text-sm text-slate-200">📅 {viewLead.created_at ? new Date(viewLead.created_at).toLocaleDateString('pt-BR') : 'Não informado'}</p></div>
-                </div>
-
-                {enriched && (
-                  <>
-                    <div className="border-t border-slate-700 my-4" />
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-base">🏢</span>
-                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Dados Empresariais</h3>
-                      {enriched.SituacaoCadastral && (
-                        <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          enriched.SituacaoCadastral === 'ATIVA' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                        }`}>{enriched.SituacaoCadastral}</span>
+                return (
+                  <tr key={lead.id} className={isSelected ? 'selected' : ''}>
+                    <td>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(lead.id)} />
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500/15 to-blue-500/15 border border-cyan-500/15 flex items-center justify-center text-xs font-bold text-cyan-400 shrink-0">
+                          {name[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium text-[13px]">{name}</p>
+                          <p className="text-[11px] text-slate-500">{lead.email || 'Sem email'}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      {phone ? (
+                        <a href={`tel:${phone}`} className="text-cyan-400 hover:text-cyan-300 text-sm transition-colors">
+                          {phone}
+                        </a>
+                      ) : (
+                        <span className="text-slate-600 text-sm">—</span>
                       )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
-                      {enriched.CNPJ && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">CNPJ</p><p className="text-sm text-slate-200">📋 {fmtCNPJ(enriched.CNPJ)}</p></div>}
-                      {enriched.RazaoSocial && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Razão Social</p><p className="text-sm text-slate-200">{enriched.RazaoSocial}</p></div>}
-                      {enriched.NomeFantasia && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Nome Fantasia</p><p className="text-sm text-slate-200">{enriched.NomeFantasia}</p></div>}
-                      {enriched.NaturezaJuridica && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Natureza Jurídica</p><p className="text-sm text-slate-200">{enriched.NaturezaJuridica}</p></div>}
-                      {enriched.Porte && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Porte</p><p className="text-sm text-slate-200">{enriched.Porte}</p></div>}
-                      {fmtCurrency(enriched.CapitalSocial) && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Capital Social</p><p className="text-sm text-slate-200">{fmtCurrency(enriched.CapitalSocial)}</p></div>}
-                      {enriched.AtividadePrincipal && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Atividade Principal</p><p className="text-sm text-slate-200">{enriched.AtividadePrincipal}</p></div>}
-                      {enriched.IdentificadorMatrizFilial && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Tipo</p><p className="text-sm text-slate-200">{enriched.IdentificadorMatrizFilial}</p></div>}
-                      {enriched.DataInicioAtividade && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Início Atividade</p><p className="text-sm text-slate-200">{enriched.DataInicioAtividade}</p></div>}
-                      {enriched.EnderecoCompleto && <div className="py-1.5 col-span-2"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Endereço Completo</p><p className="text-sm text-slate-200">📍 {enriched.EnderecoCompleto}</p></div>}
-                      {enriched.CEP && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">CEP</p><p className="text-sm text-slate-200">{enriched.CEP}</p></div>}
-                      {enriched.UF && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">UF</p><p className="text-sm text-slate-200">{enriched.UF}</p></div>}
-                    </div>
-
-                    {enriched.Responsavel && (
-                      <>
-                        <div className="border-t border-slate-700 my-4" />
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-base">👤</span>
-                          <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Responsável</h3>
+                    </td>
+                    <td>
+                      <span className="text-sm text-slate-300">{city || '—'}</span>
+                    </td>
+                    <td>
+                      <span className={`badge ${plan === 'Empresarial' ? 'badge-blue' : plan === 'Grupo' ? 'badge-amber' : 'badge-cyan'}`}>
+                        {plan}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                          <div className={`h-full rounded-full ${score >= 75 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${score}%` }} />
                         </div>
-                        <p className="text-sm text-slate-200 ml-8">{enriched.Responsavel}</p>
-                      </>
-                    )}
+                        <span className={`text-xs font-medium ${score >= 75 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
+                          {score}%
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => setViewLead(lead)} className="p-1.5 rounded-lg hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400 transition-all" title="Ver detalhes">
+                          <Eye size={15} />
+                        </button>
+                        <button
+                          onClick={() => !isBase && onAddToBase?.(lead)}
+                          className={`p-1.5 rounded-lg transition-all ${isBase ? 'bg-emerald-500/10 text-emerald-400' : 'hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400'}`}
+                          title={isBase ? 'Já na base' : 'Adicionar à base'}
+                        >
+                          <ShieldCheck size={15} />
+                        </button>
+                        <button onClick={() => onDelete?.(lead.id)} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-all" title="Excluir">
+                          <XCircle size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-                    {enriched.QSA && enriched.QSA.length > 0 && (
-                      <>
-                        <div className="border-t border-slate-700 my-4" />
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-base">👥</span>
-                          <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Quadro Societário ({enriched.QSA.length})</h3>
-                        </div>
-                        <div className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
-                          <table className="w-full text-xs">
-                            <thead><tr className="border-b border-slate-700">
-                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Nome</th>
-                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Qualificação</th>
-                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Entrada</th>
-                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Rep. Legal</th>
-                            </tr></thead>
-                            <tbody>{enriched.QSA.map((q: any, i: number) => (
-                              <tr key={i} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20">
-                                <td className="px-3 py-2 text-slate-200 font-medium">{q.nome}</td>
-                                <td className="px-3 py-2 text-slate-300">{q.qualificacao}</td>
-                                <td className="px-3 py-2 text-slate-300">{q.entrada}</td>
-                                <td className="px-3 py-2 text-slate-300">{q.representante_legal || '-'}</td>
-                              </tr>
-                            ))}</tbody>
-                          </table>
-                        </div>
-                      </>
-                    )}
-
-                    {enriched.CnaesSecundarios && enriched.CnaesSecundarios.length > 0 && (
-                      <>
-                        <div className="border-t border-slate-700 my-4" />
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-base">🏭</span>
-                          <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">CNAEs Secundários ({enriched.CnaesSecundarios.length})</h3>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">{enriched.CnaesSecundarios.map((c: string, i: number) => (
-                          <span key={i} className="px-2 py-1 rounded-lg bg-slate-700/50 text-slate-300 text-[11px] border border-slate-600/30">{c}</span>
-                        ))}</div>
-                      </>
-                    )}
-
-                    {enriched.RegimeTributario && enriched.RegimeTributario.length > 0 && (
-                      <>
-                        <div className="border-t border-slate-700 my-4" />
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-base">💰</span>
-                          <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Regime Tributário</h3>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">{enriched.RegimeTributario.map((r: string, i: number) => (
-                          <span key={i} className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[11px] border border-amber-500/20">{r}</span>
-                        ))}</div>
-                      </>
-                    )}
-
-                    {enriched.SocialMedia && Object.keys(enriched.SocialMedia).length > 0 && (() => {
-                      const SOCIAL_ICONS: Record<string, { color: string; bg: string; border: string; icon: React.ReactNode }> = {
-                        'LinkedIn': { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/25', icon: <LinkedInIcon size={20} className="text-blue-400" /> },
-                        'Instagram': { color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/25', icon: <InstagramIcon size={20} className="text-pink-400" /> },
-                        'Facebook': { color: 'text-blue-500', bg: 'bg-blue-600/10', border: 'border-blue-600/25', icon: <FacebookIcon size={20} className="text-blue-500" /> },
-                        'Twitter/X': { color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/25', icon: <XIcon size={20} className="text-sky-400" /> },
-                      }
-                      const found = Object.entries(enriched.SocialMedia).filter(([, v]: [string, any]) => v?.url && !v?.not_found)
-                      const notFound = Object.entries(enriched.SocialMedia).filter(([, v]: [string, any]) => v?.not_found)
-                      if (found.length === 0 && notFound.length === 0) return null
-                      return (
-                        <>
-                          <div className="border-t border-slate-700 my-4" />
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-base">🔗</span>
-                            <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider">Redes Sociais</h3>
-                            {found.length > 0 && (
-                              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold border border-purple-500/30">{found.length} perfil(is)</span>
-                            )}
-                          </div>
-                          {found.length > 0 && (
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                              {found.map(([platform, data]: [string, any]) => {
-                                const style = SOCIAL_ICONS[platform] || { color: 'text-slate-400', bg: 'bg-slate-700/10', border: 'border-slate-600/25', icon: '🔗' }
-                                return (
-                                  <a key={platform} href={data.url} target="_blank" rel="noopener noreferrer"
-                                    className={`flex items-center gap-3 p-3 rounded-xl ${style.bg} border ${style.border} hover:brightness-125 transition-all group`}>
-                                    <span className="text-2xl">{style.icon}</span>
-                                    <div className="min-w-0 flex-1">
-                                      <p className={`text-xs font-bold ${style.color} uppercase tracking-wider`}>{platform}</p>
-                                      <p className="text-[11px] text-slate-400 truncate group-hover:text-slate-300">{data.title || data.url}</p>
-                                    </div>
-                                    <span className="text-[10px] text-slate-500 shrink-0">↗</span>
-                                  </a>
-                                )
-                              })}
-                            </div>
-                          )}
-                          {notFound.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-1">
-                              {notFound.map(([platform]: [string, any]) => {
-                                const style = SOCIAL_ICONS[platform] || { color: 'text-slate-500', bg: 'bg-slate-800/30', border: 'border-slate-700/30', icon: '🔗' }
-                                return (
-                                  <span key={platform} className={`px-2 py-1 rounded-lg ${style.bg} border ${style.border} text-[10px] text-slate-500`}>{style.icon} {platform} — não encontrado</span>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </>
-                      )
-                    })()}
-
-                    {enriched.Website && (
-                      <>
-                        <div className="border-t border-slate-700 my-4" />
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-base">🌐</span>
-                          <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Google Maps</h3>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
-                          {enriched.Address && <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Endereço Maps</p><p className="text-sm text-slate-200">{enriched.Address}</p></div>}
-                          <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Avaliação</p><p className="text-sm text-slate-200">⭐ {enriched.Rating || 'N/A'} ({enriched['Total Reviews'] || 0} reviews)</p></div>
-                          <div className="py-1.5"><p className="text-[11px] text-slate-500 uppercase tracking-wider">Site</p>
-                            <a href={enriched.Website} target="_blank" rel="noopener noreferrer" className="text-sm text-cyan-400 hover:text-cyan-300 underline underline-offset-2 break-all">{enriched.Website}</a>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-
-                {!enriched && (
-                  <div className="mt-4 p-3 rounded-xl bg-slate-900/50 border border-slate-700/50 text-center">
-                    <p className="text-slate-500 text-xs">Dados enriquecidos não disponíveis. Importe este lead pelo Google Maps Scraper após enriquecer com "Buscar Responsável".</p>
+      {/* Detail Modal */}
+      {viewLead && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fade-in" onClick={() => setViewLead(null)}>
+          <div className="glass w-full max-w-2xl mx-4 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center text-lg font-bold text-cyan-400">
+                    {(viewLead.name || viewLead.nome || '?')[0].toUpperCase()}
                   </div>
-                )}
+                  <div>
+                    <h2 className="text-lg font-bold text-white">{viewLead.name || viewLead.nome || 'Lead'}</h2>
+                    <p className="text-xs text-slate-500">{viewLead.source || viewLead.fonte || 'Desconhecido'}</p>
+                  </div>
+                </div>
+                <button onClick={() => setViewLead(null)} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                  <XCircle size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Telefone', value: viewLead.phone || viewLead.telefone },
+                  { label: 'Email', value: viewLead.email },
+                  { label: 'Cidade', value: viewLead.city || viewLead.cidade },
+                  { label: 'Plano', value: viewLead.plan || viewLead.nicho },
+                  { label: 'Score', value: viewLead.score ? `${viewLead.score}%` : null },
+                  { label: 'Status', value: viewLead.status },
+                  { label: 'Criado em', value: viewLead.created_at ? new Date(viewLead.created_at).toLocaleDateString('pt-BR') : null },
+                ].filter(f => f.value).map(field => (
+                  <div key={field.label} className="p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{field.label}</p>
+                    <p className="text-sm text-white">{field.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        )
-      })()}
+        </div>
+      )}
     </div>
   )
 }
