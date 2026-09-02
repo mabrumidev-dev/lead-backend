@@ -160,14 +160,17 @@ export default function LeadDetailPopup({ lead, onClose }: Props) {
       </tr>`).join('')
     const cnaeRows = (lead.CnaesSecundarios || []).map(c => `<li>${c}</li>`).join('')
     const regimeRows = (lead.RegimeTributario || []).map(r => `<li>${r}</li>`).join('')
+    const socialEntries = lead.SocialMedia ? Object.entries(lead.SocialMedia).filter(([, v]: any) => v?.url && !v?.not_found) : []
+    const socialRows = socialEntries.map(([p, d]: any) => `<tr><td>${p}</td><td><a href="${d.url}">${d.url}</a></td></tr>`).join('')
 
     const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${lead.Name}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: auto; margin: 10mm; }
   body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #1e293b; background: #fff; }
   h1 { color: #0891b2; font-size: 22px; border-bottom: 3px solid #0891b2; padding-bottom: 8px; margin-bottom: 20px; }
-  h2 { color: #0e7490; font-size: 15px; margin: 20px 0 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+  h2 { color: #0e7490; font-size: 15px; margin: 20px 0 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; page-break-after: avoid; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; }
   .field { margin: 4px 0; }
   .label { font-weight: 700; color: #475569; font-size: 12px; display: inline; }
@@ -177,74 +180,72 @@ export default function LeadDetailPopup({ lead, onClose }: Props) {
   td { padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 11px; }
   ul { margin: 4px 0 4px 18px; font-size: 12px; }
   li { margin: 2px 0; }
+  .section { page-break-inside: avoid; }
   .footer { margin-top: 30px; text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
   @media print { body { padding: 15px; } }
 </style></head><body>
 <h1>${lead.Name}</h1>
 
-<h2>Google Maps</h2>
+<div class="section">
+<h2>📋 Google Maps</h2>
 <div class="grid">
-  <div class="field"><span class="label">Telefone:</span><span class="value">${lead.Phone ?? 'N/A'}</span></div>
-  <div class="field"><span class="label">Avaliação:</span><span class="value">${lead.Rating ?? 'N/A'} (${lead['Total Reviews'] ?? 0} reviews)</span></div>
-  <div class="field" style="grid-column:1/3"><span class="label">Endereço:</span><span class="value">${lead.Address ?? 'N/A'}</span></div>
-  <div class="field" style="grid-column:1/3"><span class="label">Site:</span><span class="value">${lead.Website ?? 'N/A'}</span></div>
+  <div class="field"><span class="label">📞 Telefone:</span><span class="value">${lead.Phone ?? 'N/A'}</span></div>
+  <div class="field"><span class="label">⭐ Avaliação:</span><span class="value">${lead.Rating ?? 'N/A'} (${lead['Total Reviews'] ?? 0} reviews)</span></div>
+  <div class="field" style="grid-column:1/3"><span class="label">📍 Endereço:</span><span class="value">${lead.Address ?? 'N/A'}</span></div>
+  <div class="field" style="grid-column:1/3"><span class="label">🌐 Site:</span><span class="value">${lead.Website ?? 'N/A'}</span></div>
+</div>
 </div>
 
-${hasCNPJ ? `
-<h2>Dados Empresariais (Receita Federal)</h2>
+<div class="section">
+<h2>🏢 Dados Empresariais (Receita Federal)</h2>
 <div class="grid">
-  <div class="field"><span class="label">CNPJ:</span><span class="value">${fmtCNPJ(lead.CNPJ!)}</span></div>
-  <div class="field"><span class="label">Situação:</span><span class="value">${fmt(lead.SituacaoCadastral)}</span></div>
-  <div class="field" style="grid-column:1/3"><span class="label">Razão Social:</span><span class="value">${lead.RazaoSocial}</span></div>
-  <div class="field"><span class="label">Nome Fantasia:</span><span class="value">${fmt(lead.NomeFantasia)}</span></div>
-  <div class="field"><span class="label">Porte:</span><span class="value">${fmt(lead.Porte)}</span></div>
-  <div class="field"><span class="label">Natureza Jurídica:</span><span class="value">${fmt(lead.NaturezaJuridica)}</span></div>
-  <div class="field"><span class="label">Capital Social:</span><span class="value">${fmtCurrency(lead.CapitalSocial)}</span></div>
-  <div class="field" style="grid-column:1/3"><span class="label">Atividade Principal:</span><span class="value">${fmt(lead.AtividadePrincipal)}</span></div>
-  <div class="field"><span class="label">CNAE:</span><span class="value">${fmt(lead.CNAEFiscal)}</span></div>
-  <div class="field"><span class="label">Tipo:</span><span class="value">${fmt(lead.IdentificadorMatrizFilial)}</span></div>
-  <div class="field"><span class="label">Início Atividade:</span><span class="value">${fmt(lead.DataInicioAtividade)}</span></div>
-  <div class="field"><span class="label">Simples Nacional:</span><span class="value">${lead.OpcaoSimples === true ? 'Sim' : lead.OpcaoSimples === false ? 'Não' : 'N/A'}</span></div>
-  <div class="field"><span class="label">MEI:</span><span class="value">${lead.OpcaoMEI === true ? 'Sim' : lead.OpcaoMEI === false ? 'Não' : 'N/A'}</span></div>
-  <div class="field"><span class="label">Email:</span><span class="value">${fmt(lead.Email)}</span></div>
+  <div class="field"><span class="label">📋 CNPJ:</span><span class="value">${fmtCNPJ(lead.CNPJ) || 'N/A'}</span></div>
+  <div class="field"><span class="label">📋 Situação:</span><span class="value">${fmt(lead.SituacaoCadastral)}</span></div>
+  <div class="field" style="grid-column:1/3"><span class="label">📑 Razão Social:</span><span class="value">${lead.RazaoSocial || 'N/A'}</span></div>
+  <div class="field"><span class="label">🏷️ Nome Fantasia:</span><span class="value">${fmt(lead.NomeFantasia)}</span></div>
+  <div class="field"><span class="label">📊 Porte:</span><span class="value">${fmt(lead.Porte)}</span></div>
+  <div class="field"><span class="label">🏛️ Natureza Jurídica:</span><span class="value">${fmt(lead.NaturezaJuridica)}</span></div>
+  <div class="field"><span class="label">💰 Capital Social:</span><span class="value">${fmtCurrency(lead.CapitalSocial)}</span></div>
+  <div class="field" style="grid-column:1/3"><span class="label">⚙️ Atividade Principal:</span><span class="value">${fmt(lead.AtividadePrincipal)}</span></div>
+  <div class="field"><span class="label">🔢 CNAE:</span><span class="value">${fmt(lead.CNAEFiscal)}</span></div>
+  <div class="field"><span class="label">🏷️ Tipo:</span><span class="value">${fmt(lead.IdentificadorMatrizFilial)}</span></div>
+  <div class="field"><span class="label">📅 Início Atividade:</span><span class="value">${fmt(lead.DataInicioAtividade)}</span></div>
+  <div class="field"><span class="label">✅ Simples Nacional:</span><span class="value">${lead.OpcaoSimples === true ? 'Sim' : lead.OpcaoSimples === false ? 'Não' : 'N/A'}</span></div>
+  <div class="field"><span class="label">🏠 MEI:</span><span class="value">${lead.OpcaoMEI === true ? 'Sim' : lead.OpcaoMEI === false ? 'Não' : 'N/A'}</span></div>
+  <div class="field"><span class="label">✉️ Email:</span><span class="value">${fmt(lead.Email)}</span></div>
+</div>
 </div>
 
-<h2>Endereço</h2>
+<div class="section">
+<h2>📍 Endereço</h2>
 <div class="grid">
-  <div class="field" style="grid-column:1/3"><span class="label">Logradouro:</span><span class="value">${fmt(lead.EnderecoCompleto)}</span></div>
-  <div class="field"><span class="label">CEP:</span><span class="value">${fmt(lead.CEP)}</span></div>
-  <div class="field"><span class="label">UF:</span><span class="value">${fmt(lead.UF)}</span></div>
-  <div class="field"><span class="label">Município:</span><span class="value">${fmt(lead.Municipio)}</span></div>
-  <div class="field"><span class="label">Bairro:</span><span class="value">${fmt(lead.Bairro)}</span></div>
+  <div class="field" style="grid-column:1/3"><span class="label">🏠 Logradouro:</span><span class="value">${fmt(lead.EnderecoCompleto)}</span></div>
+  <div class="field"><span class="label">📮 CEP:</span><span class="value">${fmt(lead.CEP)}</span></div>
+  <div class="field"><span class="label">🗺️ UF:</span><span class="value">${fmt(lead.UF)}</span></div>
+  <div class="field"><span class="label">🏙️ Município:</span><span class="value">${fmt(lead.Municipio)}</span></div>
+  <div class="field"><span class="label">📍 Bairro:</span><span class="value">${fmt(lead.Bairro)}</span></div>
+</div>
 </div>
 
-<h2>Contato</h2>
+<div class="section">
+<h2>📞 Contato</h2>
 <div class="grid">
-  <div class="field"><span class="label">Telefone 1:</span><span class="value">${fmt(lead.Telefone1)}</span></div>
-  <div class="field"><span class="label">Telefone 2:</span><span class="value">${fmt(lead.Telefone2)}</span></div>
+  <div class="field"><span class="label">📱 Telefone 1:</span><span class="value">${fmt(lead.Telefone1)}</span></div>
+  <div class="field"><span class="label">📱 Telefone 2:</span><span class="value">${fmt(lead.Telefone2)}</span></div>
+</div>
 </div>
 
-${(lead.QSA || []).length > 0 ? `
-<h2>Quadro Societário (${lead.QSA!.length})</h2>
-<table>
-  <tr><th>Nome</th><th>Qualificação</th><th>Entrada</th><th>Faixa Etária</th><th>Rep. Legal</th></tr>
-  ${qsaRows}
-</table>` : ''}
+${(lead.QSA || []).length > 0 ? `<div class="section"><h2>👥 Quadro Societário (${lead.QSA!.length})</h2><table><tr><th>Nome</th><th>Qualificação</th><th>Entrada</th><th>Faixa Etária</th><th>Rep. Legal</th></tr>${qsaRows}</table></div>` : ''}
 
-${(lead.CnaesSecundarios || []).length > 0 ? `
-<h2>CNAEs Secundários</h2><ul>${cnaeRows}</ul>` : ''}
+${(lead.CnaesSecundarios || []).length > 0 ? `<div class="section"><h2>🏭 CNAEs Secundários</h2><ul>${cnaeRows}</ul></div>` : ''}
 
-${(lead.RegimeTributario || []).length > 0 ? `
-<h2>Regime Tributário</h2><ul>${regimeRows}</ul>` : ''}
-` : ''}
+${(lead.RegimeTributario || []).length > 0 ? `<div class="section"><h2>💰 Regime Tributário</h2><ul>${regimeRows}</ul></div>` : ''}
 
-${(lead.SocialMedia && Object.keys(lead.SocialMedia).length > 0 && Object.entries(lead.SocialMedia).some(([, v]) => v?.url && !v?.not_found)) ? `
-<h2>Redes Sociais</h2>
-<div class="grid">
-${Object.entries(lead.SocialMedia).filter(([, v]) => v?.url && !v?.not_found).map(([platform, data]) => `
-  <div class="field" style="grid-column:1/3"><span class="label">${platform}:</span><span class="value"><a href="${data.url}" target="_blank">${data.url}</a></span></div>
-`).join('')}
-</div>` : ''}
+${lead.HealthPlan ? `<div class="section"><h2>🏥 Plano de Saúde</h2><p><strong>${lead.HealthPlan.tem_plano === true ? 'Identificado' : lead.HealthPlan.tem_plano === null ? 'Inconclusivo' : 'Não Identificado'}</strong> — Tipo: ${lead.HealthPlan.tipo || '-'} | Confiança: ${lead.HealthPlan.confianca || '-'}</p></div>` : ''}
+
+${lead.EmployeeCount && lead.EmployeeCount.fonte ? `<div class="section"><h2>👥 Colaboradores</h2><p><strong>${lead.EmployeeCount.funcionarios !== null ? lead.EmployeeCount.funcionarios + ' colaboradores' : 'Faixa: ' + (lead.EmployeeCount.faixa || '-')}</strong> — Fonte: ${lead.EmployeeCount.fonte} | Confiança: ${lead.EmployeeCount.confianca || '-'}</p></div>` : ''}
+
+${socialEntries.length > 0 ? `<div class="section"><h2>🔗 Redes Sociais</h2><table><tr><th>Plataforma</th><th>URL</th></tr>${socialRows}</table></div>` : ''}
 
 <div class="footer">Mabrumi CRM Pro — Gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
 </body></html>`
