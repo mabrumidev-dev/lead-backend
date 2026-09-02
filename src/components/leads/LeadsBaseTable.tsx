@@ -6,9 +6,10 @@ interface LeadsBaseTableProps {
   leads: Lead[]
   onStatusChange: (leadId: string, newStatus: Lead['status']) => void
   onRemoveFromBase: (leadId: string) => void
+  onViewLead?: (lead: Lead) => void
 }
 
-export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({ leads, onStatusChange, onRemoveFromBase }) => {
+export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({ leads, onStatusChange, onRemoveFromBase, onViewLead }) => {
   if (leads.length === 0) {
     return (
       <div className="glass p-12 text-center">
@@ -83,7 +84,7 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({ leads, onStatusC
                   </td>
                   <td>
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => onStatusChange(lead.id, 'new')} className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-500 hover:text-rose-400 transition-all" title="Novo">
+                      <button onClick={() => onViewLead?.(lead)} className="p-1.5 rounded-lg hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400 transition-all" title="Visualizar">
                         <Eye size={14} />
                       </button>
                       <button onClick={() => onStatusChange(lead.id, 'contacted')} className="p-1.5 rounded-lg hover:bg-amber-500/10 text-slate-500 hover:text-amber-400 transition-all" title="Contactado">

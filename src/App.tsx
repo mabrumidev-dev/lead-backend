@@ -451,8 +451,11 @@ function App() {
   const [activeFiltersState, setActiveFiltersState] = useState<FilterOptions>(INITIAL_FILTERS)
   const [toasts, setToasts] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { leads, loading, error, refetch, deleteLead, deleteMultipleLeads } = useLeads(activeFiltersState)
+  const { leads, loading, error, refetch, deleteLead, deleteMultipleLeads, restoreLead, fetchDeleted } = useLeads(activeFiltersState)
   const { baseLeads, addLeadToBase, removeLeadFromBase, updateLeadStatus } = useBaseLeads(userId)
+  const [deletedLeads, setDeletedLeads] = useState<any[]>([])
+  const [showTrash, setShowTrash] = useState(false)
+  const [viewBaseLead, setViewBaseLead] = useState<any>(null)
 
   const showToast = (message: string, type: any = 'info') => {
     const id = Date.now()
@@ -481,6 +484,8 @@ function App() {
   const handleAddToBase = (lead: any) => { addLeadToBase(lead); showToast(`${lead.name} adicionado à base!`, 'success') }
   const handleDeleteLead = async (id: string) => { await deleteLead(id); showToast('Lead excluído', 'success') }
   const handleDeleteMultipleLeads = async (ids: string[]) => { await deleteMultipleLeads(ids); showToast(`${ids.length} leads excluídos`, 'success') }
+  const handleRestoreLead = async (id: string) => { await restoreLead(id); setDeletedLeads(prev => prev.filter(l => l.id !== id)); showToast('Lead restaurado!', 'success'); refetch() }
+  const handleOpenTrash = async () => { try { const deleted = await fetchDeleted(); setDeletedLeads(deleted); setShowTrash(true) } catch (e) { showToast('Erro ao carregar lixeira', 'error') } }
 
   const handleVisionData = (data: any) => {
     if (data) {
@@ -526,11 +531,17 @@ function App() {
       case 'base':
         return (
           <div className="animate-fade-in">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-white tracking-tight">Base de Leads</h2>
-              <p className="text-sm text-slate-500 mt-1">Seus leads salvos para contato</p>
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Base de Leads</h2>
+                <p className="text-sm text-slate-500 mt-1">Seus leads salvos para contato</p>
+              </div>
+              <button onClick={handleOpenTrash} className="btn-ghost flex items-center gap-2 px-3 py-2 text-sm">
+                <span>🗑️</span>
+                <span>Lixeira</span>
+              </button>
             </div>
-            <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onRemoveFromBase={removeLeadFromBase} />
+            <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onRemoveFromBase={removeLeadFromBase} onViewLead={setViewBaseLead} />
           </div>
         )
       case 'disparo':
@@ -560,11 +571,147 @@ function App() {
     }
   }
 
+  // Trash modal
+  const TrashModal = () => {
+    if (!showTrash) return null
+    return (
+      <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setShowTrash(false)}>
+        <div className="glass w-full max-w-3xl mx-4" onClick={e => e.stopPropagation()}>
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🗑️</span>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Lixeira</h2>
+                  <p className="text-xs text-slate-500">{deletedLeads.length} lead(s) excluído(s)</p>
+                </div>
+              </div>
+              <button onClick={() => setShowTrash(false)} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {deletedLeads.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-500">Lixeira vazia</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {deletedLeads.map(lead => (
+                  <div key={lead.id} className="flex items-center gap-4 p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500/20 to-slate-600/20 border border-slate-500/20 flex items-center justify-center text-sm font-bold text-slate-400">
+                      {(lead.name || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white font-medium">{lead.name}</p>
+                      <p className="text-[11px] text-slate-500">{lead.phone || 'Sem telefone'} • {lead.city || 'Sem cidade'}</p>
+                    </div>
+                    <button
+                      onClick={() => handleRestoreLead(lead.id)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors text-xs font-medium"
+                    >
+                      Restaurar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Base lead detail modal
+  const BaseLeadDetailModal = () => {
+    if (!viewBaseLead) return null
+    const lead = viewBaseLead
+    const enriched = lead.enriched_data || {}
+    return (
+      <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setViewBaseLead(null)}>
+        <div className="glass w-full max-w-2xl mx-4" onClick={e => e.stopPropagation()}>
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center text-lg font-bold text-cyan-400">
+                  {(lead.name || '?')[0].toUpperCase()}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">{lead.name}</h2>
+                  <p className="text-xs text-slate-500">{lead.source || 'Base'}</p>
+                </div>
+              </div>
+              <button onClick={() => setViewBaseLead(null)} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: 'Telefone', value: lead.phone },
+                { label: 'Email', value: lead.email },
+                { label: 'Cidade', value: lead.city },
+                { label: 'Plano', value: lead.plan },
+                { label: 'Score', value: lead.score ? `${lead.score}%` : null },
+                { label: 'Status', value: lead.status },
+                { label: 'CNPJ', value: enriched.CNPJ || lead.cnpj },
+                { label: 'Responsável', value: enriched.Responsavel || lead.responsavel },
+                { label: 'Razão Social', value: enriched.RazaoSocial },
+                { label: 'Nome Fantasia', value: enriched.NomeFantasia },
+                { label: 'Porte', value: enriched.Porte },
+                { label: 'Atividade Principal', value: enriched.AtividadePrincipal },
+                { label: 'Website', value: enriched.Website || lead.website },
+                { label: 'Situação Cadastral', value: enriched.SituacaoCadastral },
+                { label: 'Capital Social', value: enriched.CapitalSocial },
+                { label: 'Natureza Jurídica', value: enriched.NaturezaJuridica },
+                { label: 'Regime Tributário', value: Array.isArray(enriched.RegimeTributario) ? enriched.RegimeTributario.join(', ') : enriched.RegimeTributario },
+              ].filter(f => f.value).map(field => (
+                <div key={field.label} className="p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{field.label}</p>
+                  <p className="text-sm text-white">{field.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {enriched.QSA && enriched.QSA.length > 0 && (
+              <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Quadro Societário (QSA)</p>
+                <div className="space-y-1">
+                  {enriched.QSA.map((s: any, i: number) => (
+                    <div key={i} className="text-sm text-white flex justify-between">
+                      <span>{s.nome || s.Nome || 'Sócio'}</span>
+                      <span className="text-slate-400">{s.qualificacao || s.Qualificacao || ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {enriched.SocialMedia && Object.keys(enriched.SocialMedia).some(k => enriched.SocialMedia[k]?.url) && (
+              <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Redes Sociais</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(enriched.SocialMedia).map(([platform, data]: [string, any]) => data?.url ? (
+                    <a key={platform} href={data.url} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline">
+                      {platform}
+                    </a>
+                  ) : null)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!isLogged) return <Login onLogin={handleLogin} />
 
   return (
     <ErrorBoundary>
       <ToastContainer toasts={toasts} onRemove={id => setToasts(prev => prev.filter(t => t.id !== id))} />
+      <TrashModal />
+      <BaseLeadDetailModal />
       <div className="flex min-h-screen" style={{ background: 'var(--bg-primary)' }}>
         <Sidebar
           activeTab={activeTab}

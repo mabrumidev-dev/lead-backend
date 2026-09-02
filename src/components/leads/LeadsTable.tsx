@@ -287,28 +287,46 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                 </button>
               </div>
 
+              {(() => {
+                const enriched = viewLead.enriched_data || {}
+                return (
+                  <>
+
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: 'Telefone', value: viewLead.phone || viewLead.telefone },
-                  { label: 'Email', value: viewLead.email },
+                  { label: 'Email', value: viewLead.email || enriched.Email },
                   { label: 'Cidade', value: viewLead.city || viewLead.cidade },
                   { label: 'Plano', value: viewLead.plan || viewLead.nicho },
                   { label: 'Score', value: viewLead.score ? `${viewLead.score}%` : null },
                   { label: 'Status', value: viewLead.status },
                   { label: 'Criado em', value: viewLead.created_at ? new Date(viewLead.created_at).toLocaleDateString('pt-BR') : null },
-                  { label: 'CNPJ', value: viewLead.enriched_data?.CNPJ || viewLead.cnpj || null },
-                  { label: 'Responsável', value: viewLead.enriched_data?.Responsavel || viewLead.responsavel || null },
-                  { label: 'Razão Social', value: viewLead.enriched_data?.RazaoSocial || null },
-                  { label: 'Nome Fantasia', value: viewLead.enriched_data?.NomeFantasia || null },
-                  { label: 'Porte', value: viewLead.enriched_data?.Porte || null },
-                  { label: 'Atividade Principal', value: viewLead.enriched_data?.AtividadePrincipal || null },
-                  { label: 'Website', value: viewLead.enriched_data?.Website || viewLead.website || null },
-                  { label: 'Situação Cadastral', value: viewLead.enriched_data?.SituacaoCadastral || null },
-                  { label: 'Capital Social', value: viewLead.enriched_data?.CapitalSocial || null },
-                  { label: 'Natureza Jurídica', value: viewLead.enriched_data?.NaturezaJuridica || null },
-                  { label: 'Regime Tributário', value: Array.isArray(viewLead.enriched_data?.RegimeTributario) ? viewLead.enriched_data.RegimeTributario.join(', ') : viewLead.enriched_data?.RegimeTributario || null },
-                  { label: 'Plano de Saúde', value: viewLead.enriched_data?.HealthPlan?.tem_plano === true ? 'Sim' : viewLead.enriched_data?.HealthPlan?.tem_plano === false ? 'Não' : null },
-                  { label: 'Colaboradores', value: viewLead.enriched_data?.EmployeeCount?.estimativa || null },
+                  { label: 'CNPJ', value: enriched.CNPJ || viewLead.cnpj },
+                  { label: 'Responsável', value: enriched.Responsavel || viewLead.responsavel },
+                  { label: 'Razão Social', value: enriched.RazaoSocial },
+                  { label: 'Nome Fantasia', value: enriched.NomeFantasia },
+                  { label: 'Porte', value: enriched.Porte },
+                  { label: 'Atividade Principal', value: enriched.AtividadePrincipal },
+                  { label: 'Website', value: enriched.Website || viewLead.website },
+                  { label: 'Situação Cadastral', value: enriched.SituacaoCadastral },
+                  { label: 'Capital Social', value: enriched.CapitalSocial },
+                  { label: 'Natureza Jurídica', value: enriched.NaturezaJuridica },
+                  { label: 'Regime Tributário', value: Array.isArray(enriched.RegimeTributario) ? enriched.RegimeTributario.join(', ') : enriched.RegimeTributario },
+                  { label: 'Plano de Saúde', value: enriched.HealthPlan?.tem_plano === true ? 'Sim' : enriched.HealthPlan?.tem_plano === false ? 'Não' : null },
+                  { label: 'Colaboradores', value: enriched.EmployeeCount?.estimativa || (enriched.EmployeeCount?.funcionarios ? `${enriched.EmployeeCount.funcionarios} (${enriched.EmployeeCount.fonte})` : null) },
+                  { label: 'Endereço Completo', value: enriched.EnderecoCompleto || enriched.Address },
+                  { label: 'CEP', value: enriched.CEP },
+                  { label: 'UF', value: enriched.UF },
+                  { label: 'Município', value: enriched.Municipio },
+                  { label: 'Bairro', value: enriched.Bairro },
+                  { label: 'Telefone 1', value: enriched.Telefone1 },
+                  { label: 'Telefone 2', value: enriched.Telefone2 },
+                  { label: 'CNAE Fiscal', value: enriched.CNAEFiscal },
+                  { label: 'Data Início Atividade', value: enriched.DataInicioAtividade },
+                  { label: 'Tipo', value: enriched.IdentificadorMatrizFilial },
+                  { label: 'Simples Nacional', value: enriched.OpcaoSimples === true ? 'Sim' : enriched.OpcaoSimples === false ? 'Não' : null },
+                  { label: 'MEI', value: enriched.OpcaoMEI === true ? 'Sim' : enriched.OpcaoMEI === false ? 'Não' : null },
+                  { label: 'Avaliação', value: enriched.Rating ? `${enriched.Rating} (${enriched['Total Reviews'] || 0} reviews)` : null },
                 ].filter(f => f.value).map(field => (
                   <div key={field.label} className="p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{field.label}</p>
@@ -345,6 +363,9 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                   </div>
                 </div>
               )}
+              </>
+                )
+              })()}
             </div>
           </div>
         </div>
