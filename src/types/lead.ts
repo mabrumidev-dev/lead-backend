@@ -10,6 +10,10 @@ export interface Lead {
   score: number // 0-100
   source: 'website' | 'referral' | 'purchase' | 'IA Vision' | 'Google Maps' | 'CSV'
   created_at: string
+  enriched_data?: any | null
+  website?: string | null
+  cnpj?: string | null
+  responsavel?: string | null
 }
 
 export interface FilterOptions {

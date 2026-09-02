@@ -288,6 +288,19 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                   { label: 'Score', value: viewLead.score ? `${viewLead.score}%` : null },
                   { label: 'Status', value: viewLead.status },
                   { label: 'Criado em', value: viewLead.created_at ? new Date(viewLead.created_at).toLocaleDateString('pt-BR') : null },
+                  { label: 'CNPJ', value: viewLead.enriched_data?.CNPJ || viewLead.cnpj || null },
+                  { label: 'Responsável', value: viewLead.enriched_data?.Responsavel || viewLead.responsavel || null },
+                  { label: 'Razão Social', value: viewLead.enriched_data?.RazaoSocial || null },
+                  { label: 'Nome Fantasia', value: viewLead.enriched_data?.NomeFantasia || null },
+                  { label: 'Porte', value: viewLead.enriched_data?.Porte || null },
+                  { label: 'Atividade Principal', value: viewLead.enriched_data?.AtividadePrincipal || null },
+                  { label: 'Website', value: viewLead.enriched_data?.Website || viewLead.website || null },
+                  { label: 'Situação Cadastral', value: viewLead.enriched_data?.SituacaoCadastral || null },
+                  { label: 'Capital Social', value: viewLead.enriched_data?.CapitalSocial || null },
+                  { label: 'Natureza Jurídica', value: viewLead.enriched_data?.NaturezaJuridica || null },
+                  { label: 'Regime Tributário', value: Array.isArray(viewLead.enriched_data?.RegimeTributario) ? viewLead.enriched_data.RegimeTributario.join(', ') : viewLead.enriched_data?.RegimeTributario || null },
+                  { label: 'Plano de Saúde', value: viewLead.enriched_data?.HealthPlan?.tem_plano === true ? 'Sim' : viewLead.enriched_data?.HealthPlan?.tem_plano === false ? 'Não' : null },
+                  { label: 'Colaboradores', value: viewLead.enriched_data?.EmployeeCount?.estimativa || null },
                 ].filter(f => f.value).map(field => (
                   <div key={field.label} className="p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{field.label}</p>
@@ -295,6 +308,35 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
                   </div>
                 ))}
               </div>
+
+              {/* QSA Section */}
+              {viewLead.enriched_data?.QSA && viewLead.enriched_data.QSA.length > 0 && (
+                <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Quadro Societário (QSA)</p>
+                  <div className="space-y-1">
+                    {viewLead.enriched_data.QSA.map((s: any, i: number) => (
+                      <div key={i} className="text-sm text-white flex justify-between">
+                        <span>{s.nome || s.Nome || 'Sócio'}</span>
+                        <span className="text-slate-400">{s.qualificacao || s.Qualificacao || ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Social Media Section */}
+              {viewLead.enriched_data?.SocialMedia && Object.keys(viewLead.enriched_data.SocialMedia).some(k => viewLead.enriched_data.SocialMedia[k]?.url) && (
+                <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Redes Sociais</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(viewLead.enriched_data.SocialMedia).map(([platform, data]: [string, any]) => data?.url ? (
+                      <a key={platform} href={data.url} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline">
+                        {platform}
+                      </a>
+                    ) : null)}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

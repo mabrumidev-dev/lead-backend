@@ -552,7 +552,7 @@ function App() {
       case 'scraper':
         return (
           <div className="animate-fade-in">
-            <GoogleMapsScraper onImportComplete={() => { showToast('Importado com sucesso!', 'success'); refetch(); setActiveTab('buscar') }} />
+            <GoogleMapsScraper onImportComplete={() => { showToast('Importado com sucesso!', 'success'); refetch(); setActiveTab('buscar') }} showToast={showToast} />
           </div>
         )
       default:

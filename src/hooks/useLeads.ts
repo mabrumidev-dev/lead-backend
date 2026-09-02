@@ -16,6 +16,10 @@ const mapFromSupabase = (dbLead: any): Lead => ({
   city: dbLead.cidade || dbLead.city || 'São Paulo',
   source: dbLead.fonte || dbLead.source || 'website',
   created_at: dbLead.created_at || new Date().toISOString(),
+  enriched_data: dbLead.enriched_data || null,
+  website: dbLead.website || null,
+  cnpj: dbLead.cnpj || null,
+  responsavel: dbLead.responsavel || null,
 })
 
 export const useLeads = (customFilters?: FilterOptions) => {

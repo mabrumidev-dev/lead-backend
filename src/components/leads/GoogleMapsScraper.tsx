@@ -7,6 +7,7 @@ import { Lead } from '@/types/lead'
 
 interface Props {
   onImportComplete: (leads: Lead[]) => void
+  showToast?: (message: string, type?: string) => void
 }
 
 const STORAGE_KEY = 'mabrumi_scraper_results'
@@ -80,7 +81,7 @@ function saveResults(results: ScrapedLead[]) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(results)) } catch {}
 }
 
-export function GoogleMapsScraper({ onImportComplete }: Props) {
+export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
   const { job, isScraping, startScrape, cancelScrape, reset, enrichLead, searchSocialMedia, checkHealthPlan, checkEmployeeCount } = useScraper()
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState<number>(0)
@@ -180,25 +181,93 @@ export function GoogleMapsScraper({ onImportComplete }: Props) {
     if (!displayResults || selected.size === 0) return
     setImporting(true)
     try {
-      const enrichedData: Record<string, any> = {}
-      const leadsToImport = Array.from(selected).map(idx => {
+      // Step 1: Get existing phone numbers from Supabase to detect duplicates
+      const selectedLeads = Array.from(selected).map(idx => {
         const r = displayResults[idx]
         const telefone = formatPhone(r.Phone)
-        const phoneKey = telefone.replace(/\D/g, '')
-        enrichedData[phoneKey] = { Responsavel: r.Responsavel || '', Socios: r.Socios || '', CNPJ: r.CNPJ || '', RazaoSocial: r.RazaoSocial || '', NomeFantasia: r.NomeFantasia || '', SituacaoCadastral: r.SituacaoCadastral || '', Porte: r.Porte || '', CapitalSocial: r.CapitalSocial || '', AtividadePrincipal: r.AtividadePrincipal || '', CNAEFiscal: r.CNAEFiscal || '', QSA: r.QSA || [], SocialMedia: r.SocialMedia || {}, Address: r.Address || '', Website: r.Website || '', Rating: r.Rating || '', 'Total Reviews': r['Total Reviews'] || '' }
-        return { id: crypto.randomUUID(), nome: r.Name || '', telefone, cidade: extractCity(r.Address), plano: 'Individual', score: calculateScore(r.Rating, r['Total Reviews']), created_at: new Date().toISOString() }
+        return { idx, r, telefone, phoneDigits: telefone.replace(/\D/g, '') }
+      })
+
+      const phoneNumbers = selectedLeads.map(l => l.phoneDigits).filter(Boolean)
+      let existingPhones = new Set<string>()
+      if (phoneNumbers.length > 0) {
+        const { data: existingLeads } = await supabase
+          .from('leads')
+          .select('telefone')
+          .in('telefone', phoneNumbers)
+        if (existingLeads) {
+          existingLeads.forEach((l: any) => {
+            const digits = (l.telefone || '').replace(/\D/g, '')
+            if (digits) existingPhones.add(digits)
+          })
+        }
+      }
+
+      // Step 2: Filter out duplicates
+      const newLeads = selectedLeads.filter(l => !existingPhones.has(l.phoneDigits))
+      const duplicateCount = selectedLeads.length - newLeads.length
+
+      if (newLeads.length === 0) {
+        alert(`Todos os ${selectedLeads.length} lead(s) já existem no banco!`)
+        setImporting(false)
+        return
+      }
+
+      // Step 3: Build rows with enriched data
+      const enrichedData: Record<string, any> = {}
+      const leadsToImport = newLeads.map(({ r, telefone, phoneDigits }) => {
+        const enrichedPayload = {
+          Responsavel: r.Responsavel || '', Socios: r.Socios || '', CNPJ: r.CNPJ || '',
+          RazaoSocial: r.RazaoSocial || '', NomeFantasia: r.NomeFantasia || '',
+          SituacaoCadastral: r.SituacaoCadastral || '', Porte: r.Porte || '',
+          CapitalSocial: r.CapitalSocial || '', AtividadePrincipal: r.AtividadePrincipal || '',
+          CNAEFiscal: r.CNAEFiscal || '', QSA: r.QSA || [],
+          SocialMedia: r.SocialMedia || {}, HealthPlan: r.HealthPlan || null,
+          EmployeeCount: r.EmployeeCount || null,
+          Address: r.Address || '', Website: r.Website || '',
+          Rating: r.Rating || '', 'Total Reviews': r['Total Reviews'] || '',
+          Email: r.Email || '', CEP: r.CEP || '', UF: r.UF || '',
+          Municipio: r.Municipio || '', Bairro: r.Bairro || '',
+          EnderecoCompleto: r.EnderecoCompleto || '',
+          Telefone1: r.Telefone1 || '', Telefone2: r.Telefone2 || '',
+          NaturezaJuridica: r.NaturezaJuridica || '',
+          DataInicioAtividade: r.DataInicioAtividade || '',
+          IdentificadorMatrizFilial: r.IdentificadorMatrizFilial || '',
+          RegimeTributario: r.RegimeTributario || [],
+          CnaesSecundarios: r.CnaesSecundarios || [],
+          OpcaoSimples: r.OpcaoSimples, OpcaoMEI: r.OpcaoMEI,
+        }
+        enrichedData[phoneDigits] = enrichedPayload
+        return {
+          id: crypto.randomUUID(),
+          nome: r.Name || '',
+          telefone,
+          cidade: extractCity(r.Address),
+          plano: 'Individual',
+          score: calculateScore(r.Rating, r['Total Reviews']),
+          website: r.Website || null,
+          cnpj: r.CNPJ || null,
+          responsavel: r.Responsavel || null,
+          enriched_data: enrichedPayload,
+          created_at: new Date().toISOString(),
+        }
       })
 
       const { error } = await supabase.from('leads').insert(leadsToImport)
       if (error) throw error
 
-      const existing = JSON.parse(localStorage.getItem('mabrumi_enriched_leads') || '{}')
-      localStorage.setItem('mabrumi_enriched_leads', JSON.stringify({ ...existing, ...enrichedData }))
+      // Also save to localStorage for backward compat
+      const existingLocal = JSON.parse(localStorage.getItem('mabrumi_enriched_leads') || '{}')
+      localStorage.setItem('mabrumi_enriched_leads', JSON.stringify({ ...existingLocal, ...enrichedData }))
+
       onImportComplete(leadsToImport)
       const remaining = displayResults.filter((_, i) => !selected.has(i))
       setSavedResults(remaining)
       if (remaining.length > 0) saveResults(remaining); else { localStorage.removeItem(STORAGE_KEY); reset() }
       setQuery(''); setSelected(new Set())
+
+      const msg = `${newLeads.length} lead(s) importado(s)${duplicateCount > 0 ? ` (${duplicateCount} duplicado(s) ignorado(s))` : ''}`
+      showToast(msg, 'success')
     } catch (err: any) { alert('Erro: ' + (err.message || 'Desconhecido')) } finally { setImporting(false) }
   }
 
