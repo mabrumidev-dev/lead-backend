@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Lead } from '@/types/lead'
-import { Search, Download, Eye, ShieldCheck, XCircle, ArrowDownUp, ChevronDown, Filter } from 'lucide-react'
+import { Search, Download, Eye, ShieldCheck, XCircle, ArrowDownUp, ChevronDown, Filter, FileText, FileSpreadsheet, Printer } from 'lucide-react'
 
 interface LeadsTableProps {
   leads: any[]
@@ -268,108 +268,335 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
       </div>
 
       {/* Detail Modal */}
-      {viewLead && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fade-in" onClick={() => setViewLead(null)}>
-          <div className="glass w-full max-w-2xl mx-4 animate-scale-in" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
+      {viewLead && (() => {
+        const enriched = viewLead.enriched_data || {}
+        const social = enriched.SocialMedia || {}
+        const socialEntries = Object.entries(social).filter(([, v]: any) => v?.url && !v?.not_found)
+
+        const downloadCSV = () => {
+          const h = ['Nome','Telefone','Email','Cidade','CNPJ','Razão Social','Nome Fantasia','Responsável','Porte','Atividade Principal','Website','Situação','Capital Social','Natureza Jurídica','CEP','UF','Município','Bairro','Endereço','Telefone 1','Telefone 2','CNAE Fiscal','Simples','MEI','QSA','Redes Sociais']
+          const qsa = (enriched.QSA || []).map((s: any) => `${s.nome} (${s.qualificacao})`).join('; ')
+          const socialStr = socialEntries.map(([k, v]: any) => `${k}: ${v.url}`).join('; ')
+          const v = [viewLead.name || '', viewLead.phone || '', viewLead.email || '', viewLead.city || '', enriched.CNPJ || '', enriched.RazaoSocial || '', enriched.NomeFantasia || '', enriched.Responsavel || '', enriched.Porte || '', enriched.AtividadePrincipal || '', enriched.Website || '', enriched.SituacaoCadastral || '', enriched.CapitalSocial || '', enriched.NaturezaJuridica || '', enriched.CEP || '', enriched.UF || '', enriched.Municipio || '', enriched.Bairro || '', enriched.EnderecoCompleto || '', enriched.Telefone1 || '', enriched.Telefone2 || '', enriched.CNAEFiscal || '', String(enriched.OpcaoSimples ?? ''), String(enriched.OpcaoMEI ?? ''), qsa, socialStr]
+          const csv = [h.join(','), v.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')].join('\n')
+          const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a'); a.href = url; a.download = `lead-${(viewLead.name || 'lead').replace(/[^a-zA-Z0-9]/g, '_')}.csv`; a.click(); URL.revokeObjectURL(url)
+        }
+
+        const downloadTXT = () => {
+          const sep = '═'.repeat(56)
+          const line = '─'.repeat(56)
+          let txt = `\n${sep}\n  DADOS DO LEAD\n${sep}\n\n`
+          txt += `Nome: ${viewLead.name}\nTelefone: ${viewLead.phone || 'N/A'}\nEmail: ${viewLead.email || 'N/A'}\nCidade: ${viewLead.city || 'N/A'}\n`
+          if (enriched.CNPJ) {
+            txt += `\n📋 DADOS EMPRESARIAIS\n${line}\n`
+            txt += `CNPJ: ${enriched.CNPJ}\nRazão Social: ${enriched.RazaoSocial || 'N/A'}\nNome Fantasia: ${enriched.NomeFantasia || 'N/A'}\nResponsável: ${enriched.Responsavel || 'N/A'}\nPorte: ${enriched.Porte || 'N/A'}\nAtividade: ${enriched.AtividadePrincipal || 'N/A'}\nSituação: ${enriched.SituacaoCadastral || 'N/A'}\n`
+          }
+          if (socialEntries.length > 0) {
+            txt += `\n🔗 REDES SOCIAIS\n${line}\n`
+            for (const [p, d] of socialEntries) txt += `${p}: ${d.url}\n`
+          }
+          txt += `\n${sep}\n`
+          const blob = new Blob([txt], { type: 'text/plain;charset=utf-8;' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a'); a.href = url; a.download = `lead-${(viewLead.name || 'lead').replace(/[^a-zA-Z0-9]/g, '_')}.txt`; a.click(); URL.revokeObjectURL(url)
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-8 pb-4 sm:pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fade-in" onClick={() => setViewLead(null)}>
+            <div className="relative w-full max-w-3xl mx-2 sm:mx-4 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setViewLead(null)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors z-10">
+                <XCircle size={18} />
+              </button>
+
+              <div className="p-5 max-h-[85vh] overflow-y-auto">
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-5 pr-8">
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center text-lg font-bold text-cyan-400">
-                    {(viewLead.name || viewLead.nome || '?')[0].toUpperCase()}
+                    {(viewLead.name || '?')[0].toUpperCase()}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white">{viewLead.name || viewLead.nome || 'Lead'}</h2>
-                    <p className="text-xs text-slate-500">{viewLead.source || viewLead.fonte || 'Desconhecido'}</p>
+                    <h2 className="text-lg font-bold text-white">{viewLead.name || 'Lead'}</h2>
+                    <p className="text-xs text-slate-500">{viewLead.source || viewLead.fonte || 'CRM'}</p>
                   </div>
                 </div>
-                <button onClick={() => setViewLead(null)} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-                  <XCircle size={18} />
-                </button>
-              </div>
 
-              {(() => {
-                const enriched = viewLead.enriched_data || {}
-                return (
-                  <>
-
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Telefone', value: viewLead.phone || viewLead.telefone },
-                  { label: 'Email', value: viewLead.email || enriched.Email },
-                  { label: 'Cidade', value: viewLead.city || viewLead.cidade },
-                  { label: 'Plano', value: viewLead.plan || viewLead.nicho },
-                  { label: 'Score', value: viewLead.score ? `${viewLead.score}%` : null },
-                  { label: 'Status', value: viewLead.status },
-                  { label: 'Criado em', value: viewLead.created_at ? new Date(viewLead.created_at).toLocaleDateString('pt-BR') : null },
-                  { label: 'CNPJ', value: enriched.CNPJ || viewLead.cnpj },
-                  { label: 'Responsável', value: enriched.Responsavel || viewLead.responsavel },
-                  { label: 'Razão Social', value: enriched.RazaoSocial },
-                  { label: 'Nome Fantasia', value: enriched.NomeFantasia },
-                  { label: 'Porte', value: enriched.Porte },
-                  { label: 'Atividade Principal', value: enriched.AtividadePrincipal },
-                  { label: 'Website', value: enriched.Website || viewLead.website },
-                  { label: 'Situação Cadastral', value: enriched.SituacaoCadastral },
-                  { label: 'Capital Social', value: enriched.CapitalSocial },
-                  { label: 'Natureza Jurídica', value: enriched.NaturezaJuridica },
-                  { label: 'Regime Tributário', value: Array.isArray(enriched.RegimeTributario) ? enriched.RegimeTributario.join(', ') : enriched.RegimeTributario },
-                  { label: 'Plano de Saúde', value: enriched.HealthPlan?.tem_plano === true ? 'Sim' : enriched.HealthPlan?.tem_plano === false ? 'Não' : null },
-                  { label: 'Colaboradores', value: enriched.EmployeeCount?.estimativa || (enriched.EmployeeCount?.funcionarios ? `${enriched.EmployeeCount.funcionarios} (${enriched.EmployeeCount.fonte})` : null) },
-                  { label: 'Endereço Completo', value: enriched.EnderecoCompleto || enriched.Address },
-                  { label: 'CEP', value: enriched.CEP },
-                  { label: 'UF', value: enriched.UF },
-                  { label: 'Município', value: enriched.Municipio },
-                  { label: 'Bairro', value: enriched.Bairro },
-                  { label: 'Telefone 1', value: enriched.Telefone1 },
-                  { label: 'Telefone 2', value: enriched.Telefone2 },
-                  { label: 'CNAE Fiscal', value: enriched.CNAEFiscal },
-                  { label: 'Data Início Atividade', value: enriched.DataInicioAtividade },
-                  { label: 'Tipo', value: enriched.IdentificadorMatrizFilial },
-                  { label: 'Simples Nacional', value: enriched.OpcaoSimples === true ? 'Sim' : enriched.OpcaoSimples === false ? 'Não' : null },
-                  { label: 'MEI', value: enriched.OpcaoMEI === true ? 'Sim' : enriched.OpcaoMEI === false ? 'Não' : null },
-                  { label: 'Avaliação', value: enriched.Rating ? `${enriched.Rating} (${enriched['Total Reviews'] || 0} reviews)` : null },
-                ].filter(f => f.value).map(field => (
-                  <div key={field.label} className="p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{field.label}</p>
-                    <p className="text-sm text-white">{field.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* QSA Section */}
-              {viewLead.enriched_data?.QSA && viewLead.enriched_data.QSA.length > 0 && (
-                <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Quadro Societário (QSA)</p>
-                  <div className="space-y-1">
-                    {viewLead.enriched_data.QSA.map((s: any, i: number) => (
-                      <div key={i} className="text-sm text-white flex justify-between">
-                        <span>{s.nome || s.Nome || 'Sócio'}</span>
-                        <span className="text-slate-400">{s.qualificacao || s.Qualificacao || ''}</span>
+                {/* Grid de dados */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                  {[
+                    { e: '📞', l: 'Telefone', v: viewLead.phone || viewLead.telefone },
+                    { e: '✉️', l: 'Email', v: viewLead.email },
+                    { e: '📍', l: 'Cidade', v: viewLead.city || viewLead.cidade },
+                    { e: '📊', l: 'Plano', v: viewLead.plan || viewLead.nicho },
+                    { e: '⭐', l: 'Score', v: viewLead.score ? `${viewLead.score}%` : null },
+                    { e: '🏷️', l: 'Status', v: viewLead.status === 'new' ? 'Novo' : viewLead.status === 'contacted' ? 'Contactado' : viewLead.status === 'qualified' ? 'Qualificado' : viewLead.status },
+                    { e: '📅', l: 'Criado em', v: viewLead.created_at ? new Date(viewLead.created_at).toLocaleDateString('pt-BR') : null },
+                  ].filter(f => f.v).map(f => (
+                    <div key={f.l} className="flex items-start gap-2.5 py-1.5">
+                      <span className="text-sm mt-0.5 shrink-0">{f.e}</span>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">{f.l}</p>
+                        <p className="text-sm text-slate-200 break-words">{f.v}</p>
                       </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Dados Empresariais */}
+                {enriched.CNPJ && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">🏢</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Dados Empresariais</h3>
+                      {enriched.SituacaoCadastral && (
+                        <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${enriched.SituacaoCadastral === 'ATIVA' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>{enriched.SituacaoCadastral}</span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                      {[
+                        { e: '📋', l: 'CNPJ', v: enriched.CNPJ },
+                        { e: '📑', l: 'Razão Social', v: enriched.RazaoSocial },
+                        { e: '🏷️', l: 'Nome Fantasia', v: enriched.NomeFantasia },
+                        { e: '👤', l: 'Responsável', v: enriched.Responsavel },
+                        { e: '🏛️', l: 'Natureza Jurídica', v: enriched.NaturezaJuridica },
+                        { e: '📊', l: 'Porte', v: enriched.Porte },
+                        { e: '💰', l: 'Capital Social', v: enriched.CapitalSocial ? `R$ ${Number(enriched.CapitalSocial).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : null },
+                        { e: '⚙️', l: 'Atividade Principal', v: enriched.AtividadePrincipal },
+                        { e: '🔢', l: 'CNAE Fiscal', v: enriched.CNAEFiscal ? String(enriched.CNAEFiscal) : null },
+                        { e: '📅', l: 'Início Atividade', v: enriched.DataInicioAtividade },
+                        { e: '🏷️', l: 'Tipo', v: enriched.IdentificadorMatrizFilial },
+                        { e: '✅', l: 'Simples Nacional', v: enriched.OpcaoSimples === true ? 'Sim' : enriched.OpcaoSimples === false ? 'Não' : null },
+                        { e: '🏠', l: 'MEI', v: enriched.OpcaoMEI === true ? 'Sim' : enriched.OpcaoMEI === false ? 'Não' : null },
+                        { e: '🌐', l: 'Website', v: enriched.Website || viewLead.website },
+                      ].filter(f => f.v).map(f => (
+                        <div key={f.l} className="flex items-start gap-2.5 py-1.5">
+                          <span className="text-sm mt-0.5 shrink-0">{f.e}</span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">{f.l}</p>
+                            {f.l === 'Website' && f.v ? (
+                              <a href={f.v} target="_blank" rel="noopener noreferrer" className="text-sm text-cyan-400 hover:text-cyan-300 underline underline-offset-2 break-all">{f.v}</a>
+                            ) : (
+                              <p className="text-sm text-slate-200 break-words">{f.v}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Endereço */}
+                {(enriched.EnderecoCompleto || enriched.CEP || enriched.Municipio) && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">📍</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Endereço</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                      {[
+                        { e: '🏠', l: 'Logradouro', v: enriched.EnderecoCompleto },
+                        { e: '📮', l: 'CEP', v: enriched.CEP },
+                        { e: '🗺️', l: 'UF', v: enriched.UF },
+                        { e: '🏙️', l: 'Município', v: enriched.Municipio },
+                        { e: '📍', l: 'Bairro', v: enriched.Bairro },
+                      ].filter(f => f.v).map(f => (
+                        <div key={f.l} className="flex items-start gap-2.5 py-1.5">
+                          <span className="text-sm mt-0.5 shrink-0">{f.e}</span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">{f.l}</p>
+                            <p className="text-sm text-slate-200 break-words">{f.v}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Contato */}
+                {(enriched.Telefone1 || enriched.Telefone2 || enriched.Email) && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">📞</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Contato</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                      {[
+                        { e: '📱', l: 'Telefone 1', v: enriched.Telefone1 },
+                        { e: '📱', l: 'Telefone 2', v: enriched.Telefone2 },
+                        { e: '✉️', l: 'Email', v: enriched.Email },
+                      ].filter(f => f.v).map(f => (
+                        <div key={f.l} className="flex items-start gap-2.5 py-1.5">
+                          <span className="text-sm mt-0.5 shrink-0">{f.e}</span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">{f.l}</p>
+                            <p className="text-sm text-slate-200 break-words">{f.v}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* QSA */}
+                {enriched.QSA && enriched.QSA.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">👥</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Quadro Societário ({enriched.QSA.length})</h3>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-700">
+                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Nome</th>
+                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Qualificação</th>
+                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Entrada</th>
+                              <th className="text-left px-3 py-2 text-slate-500 font-medium">Faixa Etária</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {enriched.QSA.map((s: any, i: number) => (
+                              <tr key={i} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20">
+                                <td className="px-3 py-2 text-slate-200 font-medium">{s.nome || s.Nome || 'Sócio'}</td>
+                                <td className="px-3 py-2 text-slate-300">{s.qualificacao || s.Qualificacao || ''}</td>
+                                <td className="px-3 py-2 text-slate-300">{s.entrada || ''}</td>
+                                <td className="px-3 py-2 text-slate-300">{s.faixa_etaria || ''}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Regime Tributário */}
+                {enriched.RegimeTributario && enriched.RegimeTributario.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">💰</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Regime Tributário</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {enriched.RegimeTributario.map((r: string, i: number) => (
+                        <span key={i} className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[11px] border border-amber-500/20">{r}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* CNAEs Secundários */}
+                {enriched.CnaesSecundarios && enriched.CnaesSecundarios.length > 0 && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">🏭</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">CNAEs Secundários ({enriched.CnaesSecundarios.length})</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {enriched.CnaesSecundarios.map((c: string, i: number) => (
+                        <span key={i} className="px-2 py-1 rounded-lg bg-slate-700/50 text-slate-300 text-[11px] border border-slate-600/30">{c}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Plano de Saúde */}
+                {enriched.HealthPlan && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">🏥</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Plano de Saúde</h3>
+                    </div>
+                    <div className={`flex items-center gap-3 p-3 rounded-xl border ${enriched.HealthPlan.tem_plano === true ? 'bg-emerald-500/10 border-emerald-500/25' : enriched.HealthPlan.tem_plano === null ? 'bg-amber-500/10 border-amber-500/25' : 'bg-slate-500/10 border-slate-500/25'}`}>
+                      <span className="text-xl">{enriched.HealthPlan.tem_plano === true ? '🏥' : enriched.HealthPlan.tem_plano === null ? '❓' : '⬜'}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-bold ${enriched.HealthPlan.tem_plano === true ? 'text-emerald-400' : enriched.HealthPlan.tem_plano === null ? 'text-amber-400' : 'text-slate-400'}`}>
+                          {enriched.HealthPlan.tem_plano === true ? 'Plano de Saúde Identificado' : enriched.HealthPlan.tem_plano === null ? 'Verificação Inconclusiva' : 'Plano Não Identificado'}
+                        </p>
+                        <p className="text-[11px] text-slate-400">Tipo: {enriched.HealthPlan.tipo || '-'} | Confiança: {enriched.HealthPlan.confianca || '-'}</p>
+                        {enriched.HealthPlan.sinais && enriched.HealthPlan.sinais.length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {enriched.HealthPlan.sinais.map((s: string, i: number) => <p key={i} className="text-[10px] text-slate-500">• {s}</p>)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Colaboradores */}
+                {enriched.EmployeeCount && enriched.EmployeeCount.fonte && (
+                  <>
+                    <div className="border-t border-slate-700 my-4" />
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-base">👥</span>
+                      <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Colaboradores</h3>
+                    </div>
+                    <div className={`flex items-center gap-3 p-3 rounded-xl border ${enriched.EmployeeCount.funcionarios !== null ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-sky-500/10 border-sky-500/25'}`}>
+                      <span className="text-xl">{enriched.EmployeeCount.funcionarios !== null ? '👥' : '📊'}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-bold ${enriched.EmployeeCount.funcionarios !== null ? 'text-emerald-400' : 'text-sky-400'}`}>
+                          {enriched.EmployeeCount.funcionarios !== null ? `${enriched.EmployeeCount.funcionarios.toLocaleString('pt-BR')} colaboradores` : `Faixa estimada: ${enriched.EmployeeCount.faixa || '-'} colaboradores`}
+                        </p>
+                        <p className="text-[11px] text-slate-400">Fonte: {enriched.EmployeeCount.fonte} | Confiança: {enriched.EmployeeCount.confianca || '-'}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Redes Sociais */}
+                <div className="border-t border-slate-700 my-4" />
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-base">🔗</span>
+                  <h3 className="text-sm font-semibold text-purple-400 uppercase tracking-wider">Redes Sociais</h3>
+                  {socialEntries.length > 0 && <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-[10px] font-bold border border-purple-500/30">{socialEntries.length} perfil(is)</span>}
+                </div>
+                {socialEntries.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {socialEntries.map(([platform, data]: [string, any]) => (
+                      <a key={platform} href={data.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/25 hover:brightness-125 transition-all">
+                        <span className="text-lg">🔗</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-purple-400 uppercase tracking-wider">{platform}</p>
+                          <p className="text-[11px] text-slate-400 truncate">{data.title || data.url}</p>
+                        </div>
+                        <span className="text-[10px] text-slate-500">↗</span>
+                      </a>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-xs text-slate-500">Nenhuma rede social encontrada</p>
+                )}
 
-              {/* Social Media Section */}
-              {viewLead.enriched_data?.SocialMedia && Object.keys(viewLead.enriched_data.SocialMedia).some(k => viewLead.enriched_data.SocialMedia[k]?.url) && (
-                <div className="mt-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Redes Sociais</p>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(viewLead.enriched_data.SocialMedia).map(([platform, data]: [string, any]) => data?.url ? (
-                      <a key={platform} href={data.url} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:text-cyan-300 underline">
-                        {platform}
-                      </a>
-                    ) : null)}
+                {/* Export */}
+                <div className="border-t border-slate-700 mt-4 pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Download size={14} className="text-slate-500" />
+                    <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Exportar</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={downloadCSV} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 hover:bg-emerald-600/30 transition-colors text-xs font-medium">
+                      <FileSpreadsheet size={14} /> CSV
+                    </button>
+                    <button onClick={downloadTXT} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600/20 border border-blue-600/30 text-blue-400 hover:bg-blue-600/30 transition-colors text-xs font-medium">
+                      <FileText size={14} /> TXT
+                    </button>
                   </div>
                 </div>
-              )}
-              </>
-                )
-              })()}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
