@@ -39,6 +39,7 @@ export const useLeads = (customFilters?: FilterOptions) => {
       const { data, error: supabaseError } = await supabase
         .from('leads')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
 
       if (supabaseError) throw supabaseError
@@ -73,14 +74,39 @@ export const useLeads = (customFilters?: FilterOptions) => {
     error,
     refetch: fetchLeads,
     deleteLead: async (leadId: string) => {
-      const { error } = await supabase.from('leads').delete().eq('id', leadId)
-      if (error) throw error
+      // Soft delete: set deleted_at timestamp
+      const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', leadId)
+      if (error) {
+        // Fallback: if deleted_at column doesn't exist, hard delete
+        if (error.message?.includes('deleted_at') || error.message?.includes('column')) {
+          const { error: delError } = await supabase.from('leads').delete().eq('id', leadId)
+          if (delError) throw delError
+        } else {
+          throw error
+        }
+      }
       setLeads(prev => prev.filter(l => l.id !== leadId))
     },
     deleteMultipleLeads: async (ids: string[]) => {
-      const { error } = await supabase.from('leads').delete().in('id', ids)
-      if (error) throw error
+      const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', ids)
+      if (error) {
+        if (error.message?.includes('deleted_at') || error.message?.includes('column')) {
+          const { error: delError } = await supabase.from('leads').delete().in('id', ids)
+          if (delError) throw delError
+        } else {
+          throw error
+        }
+      }
       setLeads(prev => prev.filter(l => !ids.includes(l.id)))
+    },
+    restoreLead: async (leadId: string) => {
+      const { error } = await supabase.from('leads').update({ deleted_at: null }).eq('id', leadId)
+      if (error) throw error
+    },
+    fetchDeleted: async () => {
+      const { data, error } = await supabase.from('leads').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
+      if (error) throw error
+      return (data || []).map(mapFromSupabase)
     },
     filters,
     setFilters

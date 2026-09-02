@@ -253,8 +253,26 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
         }
       })
 
-      const { error } = await supabase.from('leads').insert(leadsToImport)
-      if (error) throw error
+      // Try full insert first (with enriched columns)
+      let { error } = await supabase.from('leads').insert(leadsToImport)
+      
+      // If schema doesn't have new columns yet, fall back to basic insert
+      if (error && (error.message?.includes('schema cache') || error.message?.includes('column'))) {
+        console.warn('[IMPORT] Colunas novas não existem ainda, usando insert básico. Rode a migration SQL!')
+        const basicRows = leadsToImport.map(row => ({
+          id: row.id,
+          nome: row.nome,
+          telefone: row.telefone,
+          cidade: row.cidade,
+          plano: row.plano,
+          score: row.score,
+          created_at: row.created_at,
+        }))
+        const fallback = await supabase.from('leads').insert(basicRows)
+        if (fallback.error) throw fallback.error
+      } else if (error) {
+        throw error
+      }
 
       // Also save to localStorage for backward compat
       const existingLocal = JSON.parse(localStorage.getItem('mabrumi_enriched_leads') || '{}')
@@ -494,7 +512,18 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
           <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center mx-auto mb-4">
             <MapPin size={32} className="text-slate-600" />
           </div>
-          {job?.status === 'done' && job.results.length === 0 ? (
+          {job?.status === 'error' ? (
+            <>
+              <p className="text-rose-400 text-lg mb-2">Erro na conexão</p>
+              <p className="text-slate-500 text-sm">{job.messages[job.messages.length - 1] || 'Conexão perdida com o servidor'}</p>
+              <button onClick={() => { reset(); setQuery('') }} className="btn-primary mt-4 text-sm">Tentar novamente</button>
+            </>
+          ) : job?.status === 'cancelled' ? (
+            <>
+              <p className="text-amber-400 text-lg mb-2">Scraping cancelado</p>
+              <p className="text-slate-500 text-sm">O scraping foi interrompido pelo usuário</p>
+            </>
+          ) : job?.status === 'done' && job.results.length === 0 ? (
             <>
               <p className="text-amber-400 text-lg mb-2">Nenhum resultado</p>
               <p className="text-slate-500 text-sm">Tente ampliar os filtros ou usar outro termo</p>

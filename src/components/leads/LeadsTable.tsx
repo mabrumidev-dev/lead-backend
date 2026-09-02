@@ -46,13 +46,21 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
   }
 
   const exportCSV = () => {
-    const headers = ['Nome','Telefone','Cidade','Plano','Score','Status']
-    const rows = filteredLeads.map((l: any) => [
-      l.name || l.nome || '', l.phone || l.telefone || '', l.city || l.cidade || '',
-      l.plan || l.nicho || '', String(l.score || ''), l.status || 'new'
-    ])
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const headers = ['Nome','Telefone','Cidade','Plano','Score','Status','CNPJ','Responsavel','Razao Social','Nome Fantasia','Website','Porte','Atividade Principal','QSA','Redes Sociais']
+    const rows = filteredLeads.map((l: any) => {
+      const ed = l.enriched_data || {}
+      const qsa = Array.isArray(ed.QSA) ? ed.QSA.map((s: any) => s.nome || s.Nome || '').join('; ') : ''
+      const social = ed.SocialMedia ? Object.entries(ed.SocialMedia).filter(([, v]: any) => v?.url).map(([k]) => k).join('; ') : ''
+      return [
+        l.name || l.nome || '', l.phone || l.telefone || '', l.city || l.cidade || '',
+        l.plan || l.nicho || '', String(l.score || ''), l.status || 'new',
+        ed.CNPJ || l.cnpj || '', ed.Responsavel || l.responsavel || '', ed.RazaoSocial || '',
+        ed.NomeFantasia || '', ed.Website || l.website || '', ed.Porte || '',
+        ed.AtividadePrincipal || '', qsa, social
+      ]
+    })
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url
     a.download = `leads_mabrumi_${new Date().toISOString().split('T')[0]}.csv`
