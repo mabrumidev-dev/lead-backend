@@ -108,6 +108,10 @@ export const useLeads = (customFilters?: FilterOptions) => {
       if (error) throw error
       return (data || []).map(mapFromSupabase)
     },
+    hardDeleteLead: async (leadId: string) => {
+      const { error } = await supabase.from('leads').delete().eq('id', leadId)
+      if (error) throw error
+    },
     filters,
     setFilters
   }

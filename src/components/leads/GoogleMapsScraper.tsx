@@ -108,6 +108,16 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
     }
   }, [job?.screenshots?.length])
 
+  // Pre-fill search from trash "Re-buscar" button
+  useEffect(() => {
+    const rescraperName = sessionStorage.getItem('rescraper_name')
+    if (rescraperName) {
+      setQuery(rescraperName)
+      sessionStorage.removeItem('rescraper_name')
+      sessionStorage.removeItem('rescraper_cnpj')
+    }
+  }, [])
+
   const latestScreenshot = job?.screenshots && job.screenshots.length > 0 ? job.screenshots[job.screenshots.length - 1] : null
   const displayResults = savedResults.length > 0 ? savedResults : (job?.status === 'done' ? job.results : [])
   const showResults = displayResults && displayResults.length > 0
