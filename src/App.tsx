@@ -498,15 +498,78 @@ function App() {
   }
   const handleOpenTrash = async () => { try { const deleted = await fetchDeleted(); setDeletedLeads(deleted); setShowTrash(true) } catch (e) { showToast('Erro ao carregar lixeira', 'error') } }
 
-  const handleReenrich = (selectedLeads: any[]) => {
-    const queue = selectedLeads.map(l => ({
-      name: l.name || l.nome || '',
-      cnpj: l.cnpj || l.enriched_data?.CNPJ || '',
-      id: l.id
-    }))
-    sessionStorage.setItem('reenrich_queue', JSON.stringify(queue))
-    setActiveTab('scraper')
-    showToast(`${selectedLeads.length} leads enviados para re-enriquecimento`, 'success')
+  const [reenriching, setReenriching] = useState(false)
+  const [reenrichProgress, setReenrichProgress] = useState({ current: 0, total: 0 })
+
+  const handleReenrich = async (selectedLeads: any[]) => {
+    if (reenriching) return
+    setReenriching(true)
+    setReenrichProgress({ current: 0, total: selectedLeads.length })
+    const API_BASE = import.meta.env.VITE_API_URL || (window.location.port !== '5173' ? window.location.origin : 'http://localhost:8002')
+    let success = 0
+    let errors = 0
+    for (let i = 0; i < selectedLeads.length; i++) {
+      const lead = selectedLeads[i]
+      setReenrichProgress({ current: i + 1, total: selectedLeads.length })
+      try {
+        const res = await fetch(`${API_BASE}/api/enrich`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            website: lead.website || '',
+            name: lead.name || lead.nome || '',
+            city: lead.city || lead.cidade || '',
+            phone: lead.phone || lead.telefone || ''
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const enrichedData = {
+            Responsavel: data.responsavel || '',
+            Socios: data.socios || '',
+            CNPJ: data.cnpj || '',
+            RazaoSocial: data.razao_social || '',
+            NomeFantasia: data.nome_fantasia || '',
+            SituacaoCadastral: data.situacao_cadastral || '',
+            MotivoSituacao: data.motivo_situacao || '',
+            DataSituacaoCadastral: data.data_situacao_cadastral || '',
+            NaturezaJuridica: data.natureza_juridica || '',
+            Porte: data.porte || '',
+            CapitalSocial: data.capital_social ?? '',
+            AtividadePrincipal: data.atividade_principal || '',
+            CNAEFiscal: data.cnae_fiscal ?? '',
+            CnaesSecundarios: data.cnaes_secundarios || [],
+            OpcaoSimples: data.opcao_simples,
+            OpcaoMEI: data.opcao_mei,
+            RegimeTributario: data.regime_tributario || [],
+            SituacaoEspecial: data.situacao_especial || '',
+            DataInicioAtividade: data.data_inicio_atividade || '',
+            DataOpcaoSimples: data.opcao_simples || '',
+            IdentificadorMatrizFilial: data.identificador_matriz_filial || '',
+            CEP: data.cep || '',
+            UF: data.uf || '',
+            Municipio: data.municipio || '',
+            Bairro: data.bairro || '',
+            EnderecoCompleto: data.endereco_completo || '',
+            Telefone1: data.telefone_1 || '',
+            Telefone2: data.telefone_2 || '',
+            Email: data.email || '',
+            QSA: data.qsa || [],
+          }
+          const { error: updateErr } = await supabase.from('leads').update({ enriched_data: enrichedData }).eq('id', lead.id)
+          if (!updateErr) success++
+          else errors++
+        } else {
+          errors++
+        }
+      } catch {
+        errors++
+      }
+    }
+    setReenriching(false)
+    setReenrichProgress({ current: 0, total: 0 })
+    showToast(`Re-enriquecimento: ${success} atualizados, ${errors} erros`, success > 0 ? 'success' : 'error')
+    refetch()
   }
 
   const handleVisionData = (data: any) => {
@@ -559,10 +622,7 @@ function App() {
                 <h2 className="text-2xl font-bold text-white tracking-tight">Base de Leads</h2>
                 <p className="text-sm text-slate-500 mt-1">Seus leads salvos para contato</p>
               </div>
-              <button onClick={handleOpenTrash} className="btn-ghost flex items-center gap-2 px-3 py-2 text-sm">
-                <span>🗑️</span>
-                <span>Lixeira</span>
-              </button>
+
             </div>
             <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onRemoveFromBase={removeLeadFromBase} onViewLead={setViewBaseLead} />
           </div>
@@ -1064,6 +1124,10 @@ ${socialEntries.length > 0 ? `<h2>Redes Sociais</h2><table><tr><th>Plataforma</t
             </button>
             <div className="flex-1" />
             <div className="flex items-center gap-3">
+              <button onClick={handleOpenTrash} className="btn-ghost flex items-center gap-2 px-3 py-2 text-sm relative">
+                <span>🗑️</span>
+                <span className="hidden sm:block">Lixeira</span>
+              </button>
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center">
                 <span className="text-xs font-bold text-cyan-400">C</span>
               </div>
