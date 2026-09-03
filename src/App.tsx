@@ -516,14 +516,21 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            website: lead.website || '',
-            name: lead.name || lead.nome || '',
-            city: lead.city || lead.cidade || '',
-            phone: lead.phone || lead.telefone || ''
+            website: lead.website || lead.enriched_data?.Website || '',
+            name: lead.name || lead.nome || lead.enriched_data?.NomeFantasia || '',
+            city: lead.city || lead.cidade || lead.enriched_data?.Municipio || '',
+            phone: lead.phone || lead.telefone || lead.enriched_data?.Telefone1 || ''
           }),
         })
         if (res.ok) {
           const data = await res.json()
+          // Check if API returned meaningful data
+          const hasData = data.cnpj || data.razao_social || data.responsavel || data.nome_fantasia || data.email || data.telefone_1
+          if (!hasData) {
+            console.log('[REENRICH] Empty response for:', lead.name, data)
+            errors++
+            continue
+          }
           const enrichedData = {
             Responsavel: data.responsavel || '',
             Socios: data.socios || '',

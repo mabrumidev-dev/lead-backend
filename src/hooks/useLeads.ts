@@ -77,8 +77,14 @@ export const useLeads = (customFilters?: FilterOptions) => {
       // Soft delete: set deleted_at timestamp
       const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', leadId)
       if (error) {
-        // Fallback: if deleted_at column doesn't exist, hard delete
+        // Fallback: if deleted_at column doesn't exist, save to localStorage then hard delete
         if (error.message?.includes('deleted_at') || error.message?.includes('column')) {
+          const lead = leadsRef.current.find(l => l.id === leadId)
+          if (lead) {
+            const trash = JSON.parse(localStorage.getItem('crm_trash') || '[]')
+            trash.push({ ...lead, deleted_at: new Date().toISOString() })
+            localStorage.setItem('crm_trash', JSON.stringify(trash))
+          }
           const { error: delError } = await supabase.from('leads').delete().eq('id', leadId)
           if (delError) throw delError
         } else {
@@ -91,6 +97,13 @@ export const useLeads = (customFilters?: FilterOptions) => {
       const { error } = await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).in('id', ids)
       if (error) {
         if (error.message?.includes('deleted_at') || error.message?.includes('column')) {
+          const trash = JSON.parse(localStorage.getItem('crm_trash') || '[]')
+          const now = new Date().toISOString()
+          ids.forEach(id => {
+            const lead = leadsRef.current.find(l => l.id === id)
+            if (lead) trash.push({ ...lead, deleted_at: now })
+          })
+          localStorage.setItem('crm_trash', JSON.stringify(trash))
           const { error: delError } = await supabase.from('leads').delete().in('id', ids)
           if (delError) throw delError
         } else {
@@ -101,14 +114,38 @@ export const useLeads = (customFilters?: FilterOptions) => {
     },
     restoreLead: async (leadId: string) => {
       const { error } = await supabase.from('leads').update({ deleted_at: null }).eq('id', leadId)
-      if (error) throw error
+      if (error) {
+        // If DB restore fails, try localStorage
+        const trash = JSON.parse(localStorage.getItem('crm_trash') || '[]')
+        const restored = trash.find((l: any) => l.id === leadId)
+        if (restored) {
+          const { deleted_at, ...leadData } = restored
+          const { error: insertErr } = await supabase.from('leads').insert(leadData)
+          if (insertErr) throw insertErr
+          localStorage.setItem('crm_trash', JSON.stringify(trash.filter((l: any) => l.id !== leadId)))
+        } else {
+          throw error
+        }
+      }
     },
     fetchDeleted: async () => {
-      const { data, error } = await supabase.from('leads').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
-      if (error) throw error
-      return (data || []).map(mapFromSupabase)
+      try {
+        const { data, error } = await supabase.from('leads').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false })
+        if (error) throw error
+        const dbLeads = (data || []).map(mapFromSupabase)
+        const localTrash = JSON.parse(localStorage.getItem('crm_trash') || '[]').map(mapFromSupabase)
+        // Merge: DB leads take priority, add localStorage ones not in DB
+        const dbIds = new Set(dbLeads.map(l => l.id))
+        return [...dbLeads, ...localTrash.filter(l => !dbIds.has(l.id))]
+      } catch {
+        // If DB query fails (e.g. no deleted_at column), use localStorage only
+        return JSON.parse(localStorage.getItem('crm_trash') || '[]').map(mapFromSupabase)
+      }
     },
     hardDeleteLead: async (leadId: string) => {
+      // Also remove from localStorage trash
+      const trash = JSON.parse(localStorage.getItem('crm_trash') || '[]')
+      localStorage.setItem('crm_trash', JSON.stringify(trash.filter((l: any) => l.id !== leadId)))
       const { error } = await supabase.from('leads').delete().eq('id', leadId)
       if (error) throw error
     },
