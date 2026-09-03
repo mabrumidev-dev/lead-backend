@@ -94,6 +94,8 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
   const [savedResults, setSavedResults] = useState<ScrapedLead[]>(() => loadSavedResults() || [])
   const [selectedLeadDetail, setSelectedLeadDetail] = useState<ScrapedLead | null>(null)
   const [enrichedNames, setEnrichedNames] = useState<Set<string>>(new Set())
+  const [reenrichQueue, setReenrichQueue] = useState<{name: string; cnpj: string; id: string}[]>([])
+  const [reenrichIndex, setReenrichIndex] = useState(0)
 
   useEffect(() => {
     if (job?.status === 'done') {
@@ -108,8 +110,20 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
     }
   }, [job?.screenshots?.length])
 
-  // Pre-fill search from trash "Re-buscar" button
+  // Pre-fill search from trash "Re-buscar" button or reenrich queue
   useEffect(() => {
+    const reenrichQueue = sessionStorage.getItem('reenrich_queue')
+    if (reenrichQueue) {
+      try {
+        const queue = JSON.parse(reenrichQueue)
+        if (Array.isArray(queue) && queue.length > 0) {
+          setReenrichQueue(queue)
+          setQuery(queue[0].name)
+        }
+      } catch {}
+      sessionStorage.removeItem('reenrich_queue')
+      return
+    }
     const rescraperName = sessionStorage.getItem('rescraper_name')
     if (rescraperName) {
       setQuery(rescraperName)
@@ -313,6 +327,30 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
         </h2>
         <p className="text-sm text-slate-500 mt-1 ml-[52px]">Extraia leads diretamente do Google Maps com preview ao vivo</p>
       </div>
+
+      {/* Reenrich queue banner */}
+      {reenrichQueue.length > 0 && (
+        <div className="glass-sm p-3 border-cyan-500/20 flex items-center gap-3">
+          <RotateCcw size={16} className="text-cyan-400" />
+          <span className="text-sm text-cyan-400 font-medium">Re-enriquecimento: {reenrichIndex + 1} de {reenrichQueue.length}</span>
+          <span className="text-xs text-slate-500">— {reenrichQueue[reenrichIndex]?.name}</span>
+          <div className="ml-auto flex gap-2">
+            {reenrichIndex < reenrichQueue.length - 1 && (
+              <button onClick={() => {
+                const next = reenrichIndex + 1
+                setReenrichIndex(next)
+                setQuery(reenrichQueue[next].name)
+                reset()
+              }} className="btn-ghost text-xs px-3 py-1.5 text-cyan-400">
+                Próximo →
+              </button>
+            )}
+            <button onClick={() => { setReenrichQueue([]); setReenrichIndex(0) }} className="btn-ghost text-xs px-3 py-1.5">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search Panel */}
       <div className="glass p-5 space-y-4">

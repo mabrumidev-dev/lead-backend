@@ -498,6 +498,17 @@ function App() {
   }
   const handleOpenTrash = async () => { try { const deleted = await fetchDeleted(); setDeletedLeads(deleted); setShowTrash(true) } catch (e) { showToast('Erro ao carregar lixeira', 'error') } }
 
+  const handleReenrich = (selectedLeads: any[]) => {
+    const queue = selectedLeads.map(l => ({
+      name: l.name || l.nome || '',
+      cnpj: l.cnpj || l.enriched_data?.CNPJ || '',
+      id: l.id
+    }))
+    sessionStorage.setItem('reenrich_queue', JSON.stringify(queue))
+    setActiveTab('scraper')
+    showToast(`${selectedLeads.length} leads enviados para re-enriquecimento`, 'success')
+  }
+
   const handleVisionData = (data: any) => {
     if (data) {
       addLeadToBase({
@@ -535,7 +546,8 @@ function App() {
             <LeadsTable
               leads={leads} loading={loading} error={error} refetch={refetch}
               onAddToBase={handleAddToBase} onDelete={handleDeleteLead}
-              onDeleteMultiple={handleDeleteMultipleLeads} baseLeadIds={baseLeads.map(l => l.id)}
+              onDeleteMultiple={handleDeleteMultipleLeads} onReenrich={handleReenrich}
+              baseLeadIds={baseLeads.map(l => l.id)}
             />
           </div>
         )
