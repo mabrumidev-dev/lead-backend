@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Lead } from '@/types/lead'
-import { Search, Download, Eye, ShieldCheck, XCircle, ArrowDownUp, ChevronDown, Filter, FileText, FileSpreadsheet, Printer, RotateCcw } from 'lucide-react'
+import { Search, Download, Eye, ShieldCheck, XCircle, ArrowDownUp, ChevronDown, Filter, FileText, FileSpreadsheet, Printer } from 'lucide-react'
 
 interface LeadsTableProps {
   leads: any[]
@@ -10,12 +10,11 @@ interface LeadsTableProps {
   onAddToBase?: (lead: Lead) => void
   onDelete?: (leadId: string) => void
   onDeleteMultiple?: (ids: string[]) => void
-  onReenrich?: (leads: any[]) => void
   baseLeadIds?: string[]
 }
 
 export const LeadsTable: React.FC<LeadsTableProps> = ({
-  leads, loading, error, refetch, onAddToBase, onDelete, onDeleteMultiple, onReenrich, baseLeadIds = []
+  leads, loading, error, refetch, onAddToBase, onDelete, onDeleteMultiple, baseLeadIds = []
 }) => {
   const [search, setSearch] = useState('')
   const [viewLead, setViewLead] = useState<any>(null)
@@ -158,12 +157,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
             }} className="btn-success text-xs flex items-center gap-1.5">
               <Download size={13} /> Exportar
             </button>
-            <button onClick={() => {
-              const selectedLeads = filteredLeads.filter((l: any) => selected.has(l.id))
-              if (selectedLeads.length > 0 && onReenrich) onReenrich(selectedLeads)
-            }} className="btn-ghost text-xs flex items-center gap-1.5 px-3 py-2 text-cyan-400 border-cyan-500/30">
-              <RotateCcw size={13} /> Re-enriquecer
-            </button>
+
             <button onClick={() => {
               if (confirm(`Excluir ${selected.size} lead(s)?`)) {
                 onDeleteMultiple?.(Array.from(selected))
