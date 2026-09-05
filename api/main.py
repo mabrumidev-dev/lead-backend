@@ -175,6 +175,10 @@ async def analyze_vision(file: UploadFile = File(...)):
     except Exception as e:
         raise Exception(f"Erro ao parsear JSON da IA: {str(e)} | Resposta bruta: {res_json}")
 
+# In-memory cache for CNPJ lookups (avoids re-querying same business)
+_cnpj_cache: dict[str, dict] = {}
+
+
 @app.post("/api/enrich")
 async def enrich_lead(data: dict):
     import logging
@@ -183,6 +187,14 @@ async def enrich_lead(data: dict):
     from scraper_engine import _fallback_google_search, _normalize_phone
     website, business_name, city, phone = data.get("website", ""), data.get("name", ""), data.get("city", ""), data.get("phone", "")
     log.warning(f"[ENRICH] Called: website={website} name={business_name} city={city} phone={phone}")
+
+    # Cache check: use phone digits as key (most reliable identifier)
+    phone_digits = re.sub(r'\D', '', phone) if phone else ""
+    cache_key = phone_digits or business_name.lower().strip()
+    if cache_key and cache_key in _cnpj_cache:
+        log.warning(f"[ENRICH] Cache HIT for '{cache_key}'")
+        return _cnpj_cache[cache_key]
+
     try:
         loop = asyncio.get_event_loop()
         result = await asyncio.wait_for(
@@ -191,6 +203,9 @@ async def enrich_lead(data: dict):
         )
         log.warning(f"[ENRICH] Result: {'FOUND' if result else 'EMPTY'} cnpj={result.get('cnpj','') if result else ''}")
         if result:
+            # Cache the result
+            if cache_key:
+                _cnpj_cache[cache_key] = result
             return result
     except asyncio.TimeoutError:
         log.error(f"[ENRICH] TIMEOUT after 30s for name={business_name}")
@@ -210,7 +225,7 @@ async def enrich_lead(data: dict):
         )
         if fallback_result:
             log.warning(f"[ENRICH] Fallback found CNPJ: {fallback_result.get('cnpj','')}")
-            return {
+            result = {
                 "responsavel": fallback_result.get("responsavel", ""),
                 "socios": fallback_result.get("socios", ""),
                 "cnpj": fallback_result.get("cnpj", ""),
@@ -245,6 +260,9 @@ async def enrich_lead(data: dict):
                 "data_situacao_cadastral": fallback_result.get("data_situacao_cadastral", ""),
                 "motivo_situacao": fallback_result.get("motivo_situacao", ""),
             }
+            if cache_key:
+                _cnpj_cache[cache_key] = result
+            return result
     except Exception as e:
         log.error(f"[ENRICH] Fallback error: {type(e).__name__}: {e}")
     return {"responsavel": "", "socios": "", "cnpj": "", "razao_social": "", "nome_fantasia": "", "situacao_cadastral": "", "natureza_juridica": "", "porte": "", "capital_social": "", "atividade_principal": "", "cnae_fiscal": "", "cnaes_secundarios": [], "opcao_simples": None, "opcao_mei": None, "regime_tributario": [], "situacao_especial": "", "data_inicio_atividade": "", "identificador_matriz_filial": "", "cep": "", "uf": "", "municipio": "", "bairro": "", "endereco_completo": "", "telefone_1": "", "telefone_2": "", "fax": "", "email": "", "qsa": [], "entidade_federativa": "", "codigo_municipio_ibge": "", "data_opcao_simples": "", "data_situacao_cadastral": "", "motivo_situacao": ""}

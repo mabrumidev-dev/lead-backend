@@ -391,6 +391,25 @@ export const useBaseLeads = (userId: string | null) => {
     }
   }, [baseLeads])
 
+  // Batch reprocess: process leads one by one sequentially
+  const batchReprocessLead = useCallback(async (leadIds: string[]): Promise<void> => {
+    for (let i = 0; i < leadIds.length; i++) {
+      const leadId = leadIds[i]
+      const lead = baseLeads.find(l => l.id === leadId)
+      if (!lead) continue
+      console.log(`[BATCH-REPROCESS] ${i + 1}/${leadIds.length}: ${lead.name}`)
+      try {
+        await reprocessLead(leadId)
+      } catch (err) {
+        console.error(`[BATCH-REPROCESS] Erro em ${lead.name}:`, err)
+      }
+      // Small delay between requests to avoid rate limiting
+      if (i < leadIds.length - 1) {
+        await new Promise(r => setTimeout(r, 500))
+      }
+    }
+  }, [baseLeads, reprocessLead])
+
   // Computed: active leads (not deleted)
   const activeLeads = baseLeads.filter(l => !l.deletedAt)
   const trashedLeads = baseLeads.filter(l => l.deletedAt)
@@ -406,6 +425,7 @@ export const useBaseLeads = (userId: string | null) => {
     permanentDelete,
     updateLeadStatus,
     reprocessLead,
+    batchReprocessLead,
     refetch: fetchBaseLeads
   }
 }

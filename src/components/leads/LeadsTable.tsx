@@ -21,15 +21,23 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const filteredLeads = useMemo(() => {
-    if (!search.trim()) return leads
-    const term = search.toLowerCase()
-    return leads.filter((lead: any) => {
-      const name = (lead.name || lead.nome || '').toLowerCase()
-      const phone = (lead.phone || lead.telefone || '').toLowerCase()
-      const city = (lead.city || lead.cidade || '').toLowerCase()
-      return name.includes(term) || phone.includes(term) || city.includes(term)
-    })
-  }, [leads, search])
+    let result = leads
+    // Filtrar leads que já estão na base
+    if (baseLeadIds.length > 0) {
+      const baseIds = new Set(baseLeadIds)
+      result = result.filter((lead: any) => !baseIds.has(lead.id))
+    }
+    if (search.trim()) {
+      const term = search.toLowerCase()
+      result = result.filter((lead: any) => {
+        const name = (lead.name || lead.nome || '').toLowerCase()
+        const phone = (lead.phone || lead.telefone || '').toLowerCase()
+        const city = (lead.city || lead.cidade || '').toLowerCase()
+        return name.includes(term) || phone.includes(term) || city.includes(term)
+      })
+    }
+    return result
+  }, [leads, search, baseLeadIds])
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -158,11 +166,13 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
               <Download size={13} /> Exportar
             </button>
 
-            <button onClick={() => {
+            <button onClick={async () => {
               const leadsToAdd = filteredLeads.filter((l: any) => selected.has(l.id) && !baseLeadIds.includes(l.id))
               if (leadsToAdd.length === 0) { alert('Todos já estão na base'); return }
               if (confirm(`Adicionar ${leadsToAdd.length} lead(s) na base?`)) {
-                leadsToAdd.forEach((l: any) => onAddToBase?.(l))
+                for (const l of leadsToAdd) {
+                  await onAddToBase?.(l)
+                }
                 setSelected(new Set())
               }
             }} className="btn-success text-xs flex items-center gap-1.5">

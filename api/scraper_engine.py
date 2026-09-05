@@ -314,28 +314,122 @@ def _cnpj_from_directories(business_name: str, city: str = "", phone: str = "") 
     return None
 
 
-def _cnpj_from_biz_translate(business_name: str, city: str = "") -> Optional[str]:
-    """Use Google Translate as proxy to scrape cnpj.biz search results for a CNPJ."""
+def _cnpj_from_biz(business_name: str, city: str = "") -> tuple[Optional[str], Optional[dict]]:
+    """Scrape CNPJ.biz directly for CNPJ + full data. Returns (cnpj, data_dict)."""
     clean_name = _clean_business_name(business_name)
     if not clean_name:
-        return None
+        return None, None
     query = f"{clean_name} {city}".strip() if city else clean_name
-    target_url = f"https://cnpj.biz/procura/{requests.utils.quote(query)}"
-    gt_url = f"https://translate.google.com/translate?sl=pt&tl=en&u={requests.utils.quote(target_url)}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+    }
     try:
-        resp = requests.get(gt_url, timeout=15, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html",
-        })
-        if resp.status_code == 200:
-            cnpujs = re.findall(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', resp.text)
-            for raw in cnpujs:
-                cnpj = re.sub(r'\D', '', raw)
+        resp = requests.get(
+            f"https://cnpj.biz/procura/{requests.utils.quote(query)}",
+            timeout=10, headers=headers
+        )
+        if resp.status_code != 200:
+            return None, None
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # Extract first result link
+        first_link = soup.select_one("a[href*='/']")
+        if not first_link:
+            # Fallback: regex for CNPJ in page
+            match = re.search(r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})', resp.text)
+            if match:
+                cnpj = re.sub(r'\D', '', match.group(1))
                 if _is_valid_cnpj(cnpj):
-                    return cnpj
+                    return cnpj, None
+            return None, None
+        href = first_link.get('href', '')
+        # Check if href contains a CNPJ pattern
+        cnpj_match = re.search(r'(\d{2})[.-]?(\d{3})[.-]?(\d{3})[/.-]?(\d{4})[.-]?(\d{2})', href)
+        if not cnpj_match:
+            # Try extracting from link text
+            cnpj_match = re.search(r'(\d{2})[.-]?(\d{3})[.-]?(\d{3})[/.-]?(\d{4})[.-]?(\d{2})', first_link.get_text())
+        if not cnpj_match:
+            return None, None
+        cnpj = ''.join(cnpj_match.groups())
+        if not _is_valid_cnpj(cnpj):
+            return None, None
+        # Scrape detail page for full data
+        detail_url = f"https://cnpj.biz/{cnpj}"
+        try:
+            detail_resp = requests.get(detail_url, timeout=10, headers=headers)
+            if detail_resp.status_code == 200:
+                data = _parse_cnpj_biz_detail(detail_resp.text, cnpj)
+                if data:
+                    return cnpj, data
+        except Exception:
+            pass
+        return cnpj, None
     except Exception:
-        pass
-    return None
+        return None, None
+
+
+def _parse_cnpj_biz_detail(html: str, cnpj: str) -> Optional[dict]:
+    """Parse CNPJ.biz detail page to extract business data."""
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(" ", strip=True)
+        data = {"cnpj": cnpj}
+        # Extract fields from page text using patterns
+        def _extract_field(patterns: list[str], text: str) -> str:
+            for pat in patterns:
+                m = re.search(pat, text, re.I)
+                if m:
+                    return m.group(1).strip()
+            return ""
+        data["razao_social"] = _extract_field([
+            r"Raz[aã]o Social[:\s]+([^\n|]+)",
+            r"Nome Empresarial[:\s]+([^\n|]+)",
+        ], text)
+        data["nome_fantasia"] = _extract_field([
+            r"Nome Fantasia[:\s]+([^\n|]+)",
+            r"Fantasia[:\s]+([^\n|]+)",
+        ], text)
+        data["situacao_cadastral"] = _extract_field([
+            r"Situa[cç][aã]o Cadastral[:\s]+([^\n|]+)",
+        ], text)
+        data["porte"] = _extract_field([r"Porte[:\s]+([^\n|]+)"], text)
+        data["natureza_juridica"] = _extract_field([r"Natureza [Jj]ur[ií]dica[:\s]+([^\n|]+)"], text)
+        data["capital_social"] = _extract_field([r"Capital Social[:\s]+([\d.,]+)"], text)
+        data["atividade_principal"] = _extract_field([
+            r"Atividade Principal[:\s]+([^\n|]+)",
+            r"CNAE Fiscal[:\s]+([^\n|]+)",
+        ], text)
+        data["cnae_fiscal"] = _extract_field([r"CNAE[:\s]+(\d+)"], text)
+        # Address
+        data["cep"] = _extract_field([r"CEP[:\s]+(\d{5}-?\d{3})"], text)
+        data["uf"] = _extract_field([r"UF[:\s]+([A-Z]{2})"], text)
+        data["municipio"] = _extract_field([r"Munic[ií]pio[:\s]+([^\n|]+)"], text)
+        data["bairro"] = _extract_field([r"Bairro[:\s]+([^\n|]+)"], text)
+        data["endereco_completo"] = _extract_field([
+            r"Logradouro[:\s]+([^\n|]+)",
+            r"Endere[cç]o[:\s]+([^\n|]+)",
+        ], text)
+        # Contact
+        data["telefone_1"] = _extract_field([r"Telefone[:\s]+([()\d\s-]+)"], text)
+        data["email"] = _extract_field([r"Email[:\s]+([\w.@-]+)"], text)
+        # Responsible
+        data["responsavel"] = _extract_field([
+            r"Respons[aá]vel[:\s]+([^\n|]+)",
+            r"S[oó]cio[:\s]+([^\n|]+)",
+        ], text)
+        # QSA
+        qsa = []
+        qsa_section = re.findall(r'(?:S[oó]cio|Quadro Societ[aá]rio)[:\s]*(.+?)(?=\n\s*\n|$)', text, re.I)
+        for block in qsa_section:
+            names = re.findall(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', block)
+            for n in names:
+                qsa.append({"nome": n, "qualificacao": "", "entrada": ""})
+        data["qsa"] = qsa
+        data["socios"] = ", ".join([q["nome"] for q in qsa])
+        return data
+    except Exception:
+        return None
 
 
 def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone: str = "") -> Optional[dict]:
@@ -354,6 +448,7 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
         return BUDGET - (_time.time() - start)
 
     cnpj = None
+    biz_data = None  # Full data from CNPJ.biz if available
 
     # Strategy 1: Website scraping (fastest, most reliable)
     if _is_useful_website(website_url) and _left() > 0:
@@ -361,11 +456,22 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
         cnpj = _cnpj_from_website(website_url)
         log.warning(f"[CNPJ] Strategy 1 result: {cnpj}")
 
-    # Strategy 2: Parallel search (Bing + directories) - bounded by remaining budget
+    # Strategy 2: CNPJ.biz direct (fast, returns CNPJ + full data)
     if not cnpj and _left() > 0:
         clean_name = _clean_business_name(business_name, city)
         if clean_name:
-            log.warning("[CNPJ] Strategy 2: Bing + directories...")
+            log.warning("[CNPJ] Strategy 2: CNPJ.biz direct...")
+            try:
+                cnpj, biz_data = _cnpj_from_biz(clean_name, city)
+            except Exception as e:
+                log.warning(f"[CNPJ] Strategy 2 error: {e}")
+            log.warning(f"[CNPJ] Strategy 2 result: cnpj={cnpj} has_data={biz_data is not None}")
+
+    # Strategy 3: Parallel search (Bing + directories) - bounded by remaining budget
+    if not cnpj and _left() > 0:
+        clean_name = _clean_business_name(business_name, city)
+        if clean_name:
+            log.warning("[CNPJ] Strategy 3: Bing + directories...")
             with ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {
                     executor.submit(_cnpj_from_bing, clean_name, city): "bing",
@@ -376,21 +482,10 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                         result = future.result()
                         if result:
                             cnpj = result
-                            log.warning(f"[CNPJ] Strategy 2 found: {cnpj}")
+                            log.warning(f"[CNPJ] Strategy 3 found: {cnpj}")
                             break
                     except Exception:
                         continue
-
-    # Strategy 3: cnpj.biz via Google Translate proxy (bypasses IP blocks)
-    if not cnpj and _left() > 0:
-        clean_name = _clean_business_name(business_name, city)
-        if clean_name:
-            log.warning("[CNPJ] Strategy 3: Google Translate proxy...")
-            try:
-                cnpj = _cnpj_from_biz_translate(clean_name, city)
-            except Exception as e:
-                log.warning(f"[CNPJ] Strategy 3 error: {e}")
-            log.warning(f"[CNPJ] Strategy 3 result: {cnpj}")
 
     # Strategy 4: Retry with short/core name (strips descriptors like "centro odontologico")
     if not cnpj and _left() > 0:
@@ -400,12 +495,19 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
             with ThreadPoolExecutor(max_workers=2) as executor:
                 futures = {
                     executor.submit(_cnpj_from_bing, core_name, city): "bing",
-                    executor.submit(_cnpj_from_biz_translate, core_name, city): "biz",
+                    executor.submit(_cnpj_from_biz, core_name, city): "biz",
                 }
                 for future in as_completed(futures, timeout=max(1.0, min(_left(), 10))):
                     try:
                         result = future.result()
-                        if result:
+                        if isinstance(result, tuple):
+                            found_cnpj, found_data = result
+                            if found_cnpj:
+                                cnpj = found_cnpj
+                                biz_data = found_data
+                                log.warning(f"[CNPJ] Strategy 4 found: {cnpj}")
+                                break
+                        elif result:
                             cnpj = result
                             log.warning(f"[CNPJ] Strategy 4 found: {cnpj}")
                             break
@@ -413,8 +515,58 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                         continue
 
     if cnpj:
+        # If CNPJ.biz returned full data, use it (skip Minha Receita call)
+        if biz_data and biz_data.get('razao_social'):
+            log.warning(f"[CNPJ] Using CNPJ.biz data directly for {cnpj}")
+            # Normalize CNPJ.biz data to match Minha Receita format
+            normalized = {
+                "cnpj": cnpj,
+                "razao_social": biz_data.get("razao_social", ""),
+                "nome_fantasia": biz_data.get("nome_fantasia", ""),
+                "situacao_cadastral": biz_data.get("situacao_cadastral", ""),
+                "natureza_juridica": biz_data.get("natureza_juridica", ""),
+                "porte": biz_data.get("porte", ""),
+                "capital_social": biz_data.get("capital_social", ""),
+                "atividade_principal": biz_data.get("atividade_principal", ""),
+                "cnae_fiscal": biz_data.get("cnae_fiscal", ""),
+                "cnaes_secundarios": biz_data.get("cnaes_secundarios", []),
+                "responsavel": biz_data.get("responsavel", ""),
+                "socios": biz_data.get("socios", ""),
+                "qsa": biz_data.get("qsa", []),
+                "cep": biz_data.get("cep", ""),
+                "uf": biz_data.get("uf", ""),
+                "municipio": biz_data.get("municipio", ""),
+                "bairro": biz_data.get("bairro", ""),
+                "endereco_completo": biz_data.get("endereco_completo", ""),
+                "telefone_1": biz_data.get("telefone_1", ""),
+                "telefone_2": biz_data.get("telefone_2", ""),
+                "email": biz_data.get("email", ""),
+                "opcao_simples": None,
+                "opcao_mei": None,
+                "regime_tributario": [],
+                "situacao_especial": "",
+                "data_inicio_atividade": "",
+                "data_opcao_simples": "",
+                "data_situacao_cadastral": "",
+                "motivo_situacao": "",
+                "identificador_matriz_filial": "",
+                "entidade_federativa": "",
+                "codigo_municipio_ibge": "",
+                "fax": "",
+            }
+            # Fill missing fields from Minha Receita if budget allows
+            if _left() > 2:
+                log.warning(f"[CNPJ] Supplementing with Minha Receita for {cnpj}...")
+                api_data = _lookup_cnpj_api(cnpj)
+                if api_data:
+                    # Merge: prefer non-empty values from either source
+                    for key, val in api_data.items():
+                        if val and (not normalized.get(key) or normalized[key] == ""):
+                            normalized[key] = val
+            return normalized
+
+        # Fallback: full Minha Receita lookup
         log.warning(f"[CNPJ] Found CNPJ {cnpj}, calling Minha Receita API...")
-        # Reserve time for the API lookup inside the budget
         if _left() > 0:
             return _lookup_cnpj_api(cnpj)
         return None

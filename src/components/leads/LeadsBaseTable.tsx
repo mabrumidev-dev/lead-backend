@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
   RotateCcw,
+  Zap,
 } from 'lucide-react'
 
 interface LeadsBaseTableProps {
@@ -17,6 +18,7 @@ interface LeadsBaseTableProps {
   onStatusChange: (leadId: string, newStatus: Lead['status']) => void
   onTrashLead: (leadId: string) => void
   onReprocessLead: (leadId: string) => Promise<boolean>
+  onBatchReprocess?: (leadIds: string[]) => Promise<void>
 }
 
 export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
@@ -24,9 +26,13 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
   onStatusChange,
   onTrashLead,
   onReprocessLead,
+  onBatchReprocess,
 }) => {
   const [reprocessing, setReprocessing] = useState<Set<string>>(new Set())
   const [viewLead, setViewLead] = useState<any>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [batchProcessing, setBatchProcessing] = useState(false)
+  const [batchProgress, setBatchProgress] = useState('')
 
   const computedLeads = useMemo(
     () =>
@@ -42,6 +48,20 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
     [leads]
   )
 
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selected.size === leads.length) setSelected(new Set())
+    else setSelected(new Set(leads.map(l => l.id)))
+  }
+
   const handleReprocess = async (leadId: string) => {
     setReprocessing(prev => new Set(prev).add(leadId))
     try {
@@ -55,6 +75,19 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
     }
   }
 
+  const handleBatchReprocess = async () => {
+    if (selected.size === 0 || !onBatchReprocess) return
+    setBatchProcessing(true)
+    setBatchProgress(`0/${selected.size}`)
+    try {
+      await onBatchReprocess(Array.from(selected))
+    } finally {
+      setBatchProcessing(false)
+      setBatchProgress('')
+      setSelected(new Set())
+    }
+  }
+
   if (leads.length === 0) {
     return (
       <div className="p-4 sm:p-8 text-center">
@@ -65,10 +98,46 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="space-y-3">
+      {/* Selection bar */}
+      {selected.size > 0 && (
+        <div className="glass-sm p-3 border-cyan-500/20 flex flex-col sm:flex-row items-start sm:items-center gap-3 animate-scale-in">
+          <span className="text-sm text-cyan-400 font-medium">{selected.size} selecionado(s)</span>
+          <div className="flex gap-2 sm:ml-auto">
+            <button
+              onClick={handleBatchReprocess}
+              disabled={batchProcessing}
+              className="btn-primary text-xs flex items-center gap-1.5"
+            >
+              {batchProcessing ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" />
+                  {batchProgress || 'Processando...'}
+                </>
+              ) : (
+                <>
+                  <Zap size={13} />
+                  Re-processar selecionados
+                </>
+              )}
+            </button>
+            <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs">
+              Limpar seleção
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="overflow-x-auto">
       <table className="w-full min-w-table">
         <thead className="border-b border-slate-800/50">
           <tr className="text-slate-400 text-xs uppercase">
+            <th className="w-10 py-3 px-4 text-left">
+              <input
+                type="checkbox"
+                checked={leads.length > 0 && selected.size === leads.length}
+                onChange={toggleSelectAll}
+              />
+            </th>
             <th className="py-3 px-4 text-left">Lead</th>
             <th className="py-3 px-4 text-left">Contato</th>
             <th className="py-3 px-4 text-left">Idade</th>
@@ -80,7 +149,14 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
         </thead>
         <tbody className="divide-y divide-slate-800/50">
           {computedLeads.map((lead) => (
-            <tr key={lead.id} className="hover:bg-slate-900/30 transition-colors">
+            <tr key={lead.id} className={`hover:bg-slate-900/30 transition-colors ${selected.has(lead.id) ? 'selected' : ''}`}>
+              <td className="py-3 px-4">
+                <input
+                  type="checkbox"
+                  checked={selected.has(lead.id)}
+                  onChange={() => toggleSelect(lead.id)}
+                />
+              </td>
               <td className="py-3 px-4">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-md bg-slate-800/50 flex items-center justify-center">
@@ -175,6 +251,7 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
           ))}
         </tbody>
       </table>
+      </div>
 
       {/* Lead Detail Modal */}
       {viewLead && (() => {

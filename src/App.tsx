@@ -141,7 +141,7 @@ function App() {
   const [toasts, setToasts] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { leads, loading, error, refetch, deleteLead, deleteMultipleLeads } = useLeads(activeFiltersState)
-  const { baseLeads, trashedLeads, addLeadToBase, removeLeadFromBase, trashLead, restoreLead, permanentDelete, updateLeadStatus, reprocessLead } = useBaseLeads(userId)
+  const { baseLeads, trashedLeads, addLeadToBase, removeLeadFromBase, trashLead, restoreLead, permanentDelete, updateLeadStatus, reprocessLead, batchReprocessLead } = useBaseLeads(userId)
 
   const showToast = (message: string, type: any = 'info') => {
     const id = Date.now();
@@ -195,6 +195,11 @@ function App() {
   }
   const handleDeleteLead = async (id: string) => { await deleteLead(id); showToast('Excluído', 'success'); };
   const handleDeleteMultipleLeads = async (ids: string[]) => { await deleteMultipleLeads(ids); showToast('Excluídos', 'success'); };
+  const handleBatchReprocess = async (leadIds: string[]) => {
+    showToast(`Re-processando ${leadIds.length} lead(s)...`, 'info')
+    await batchReprocessLead(leadIds)
+    showToast(`✅ ${leadIds.length} lead(s) re-processado(s)!`, 'success')
+  }
 
   const handleVisionData = (data: any) => {
     if (data) {
@@ -231,11 +236,11 @@ function App() {
         </div>
       );
     }
-    if (activeTab === 'base') return <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onTrashLead={handleTrashLead} onReprocessLead={handleReprocessLead} />;
+    if (activeTab === 'base') return <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onTrashLead={handleTrashLead} onReprocessLead={handleReprocessLead} onBatchReprocess={handleBatchReprocess} />;
     if (activeTab === 'lixeira') return <TrashView trashedLeads={trashedLeads} onRestore={handleRestoreLead} onPermanentDelete={handlePermanentDelete} />;
     if (activeTab === 'disparo') return <LeadsDispatchWhatsApp leads={baseLeads as any} onClose={() => setActiveTab('base')} onStatusChange={(id, s) => updateLeadStatus(id, s)} onRemoveFromBase={handleTrashLead} />;
     if (activeTab === 'importar') return <ImportLeads onImportComplete={(_l) => { showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} onBack={() => setActiveTab('buscar')} />;
-    if (activeTab === 'scraper') return <GoogleMapsScraper onImportComplete={(_l) => { showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} showToast={showToast} />;
+    if (activeTab === 'scraper') return <GoogleMapsScraper onImportComplete={async (importedLeads) => { for (const l of importedLeads) { await addLeadToBase(l); } showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} showToast={showToast} />;
     return null;
   }
 
