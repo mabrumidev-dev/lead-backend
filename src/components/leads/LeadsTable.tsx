@@ -159,6 +159,17 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
             </button>
 
             <button onClick={() => {
+              const leadsToAdd = filteredLeads.filter((l: any) => selected.has(l.id) && !baseLeadIds.includes(l.id))
+              if (leadsToAdd.length === 0) { alert('Todos já estão na base'); return }
+              if (confirm(`Adicionar ${leadsToAdd.length} lead(s) na base?`)) {
+                leadsToAdd.forEach((l: any) => onAddToBase?.(l))
+                setSelected(new Set())
+              }
+            }} className="btn-success text-xs flex items-center gap-1.5">
+              <ShieldCheck size={13} /> Adicionar na Base
+            </button>
+
+            <button onClick={() => {
               if (confirm(`Excluir ${selected.size} lead(s)?`)) {
                 onDeleteMultiple?.(Array.from(selected))
                 setSelected(new Set())
