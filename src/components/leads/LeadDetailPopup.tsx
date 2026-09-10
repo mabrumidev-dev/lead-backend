@@ -24,7 +24,7 @@ export default function LeadDetailPopup({ lead, onClose }: Props) {
     if (v === null || v === undefined || v === '') return 'Não informado'
     return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
   }
-  const fmtCNPJ = (v: string) => {
+  const fmtCNPJ = (v: string | undefined | null) => {
     if (!v) return 'Não informado'
     const d = v.replace(/\D/g, '')
     if (d.length === 14)

@@ -288,14 +288,30 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
       const existingLocal = JSON.parse(localStorage.getItem('mabrumi_enriched_leads') || '{}')
       localStorage.setItem('mabrumi_enriched_leads', JSON.stringify({ ...existingLocal, ...enrichedData }))
 
-      onImportComplete(leadsToImport)
+      onImportComplete(leadsToImport.map(l => ({
+        id: l.id,
+        name: l.nome,
+        email: 'N/A',
+        phone: l.telefone,
+        age: 30,
+        plan: (l.plano || 'Individual') as Lead['plan'],
+        status: 'new' as const,
+        score: l.score,
+        city: l.cidade,
+        source: 'Google Maps' as const,
+        created_at: l.created_at,
+        enriched_data: l.enriched_data,
+        website: l.website,
+        cnpj: l.cnpj,
+        responsavel: l.responsavel,
+      })))
       const remaining = displayResults.filter((_, i) => !selected.has(i))
       setSavedResults(remaining)
       if (remaining.length > 0) saveResults(remaining); else { localStorage.removeItem(STORAGE_KEY); reset() }
       setQuery(''); setSelected(new Set())
 
       const msg = `${newLeads.length} lead(s) importado(s)${duplicateCount > 0 ? ` (${duplicateCount} duplicado(s) ignorado(s))` : ''}`
-      showToast(msg, 'success')
+      showToast?.(msg, 'success')
     } catch (err: any) { alert('Erro: ' + (err.message || 'Desconhecido')) } finally { setImporting(false) }
   }
 

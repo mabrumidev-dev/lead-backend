@@ -6,11 +6,19 @@ import threading
 import asyncio
 import re
 import logging
+from typing import Optional
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -175,8 +183,33 @@ async def analyze_vision(file: UploadFile = File(...)):
     except Exception as e:
         raise Exception(f"Erro ao parsear JSON da IA: {str(e)} | Resposta bruta: {res_json}")
 
+# CNPJ microservice URL (local PostgreSQL + trigram)
+CNPJ_SERVICE_URL = os.environ.get('CNPJ_SERVICE_URL', '')
+
 # In-memory cache for CNPJ lookups (avoids re-querying same business)
 _cnpj_cache: dict[str, dict] = {}
+
+
+def _try_cnpj_service(website: str, business_name: str, city: str, phone: str) -> Optional[dict]:
+    """Try CNPJ microservice first (local DB with trigram search)."""
+    if not CNPJ_SERVICE_URL:
+        return None
+    try:
+        import httpx
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.post(f"{CNPJ_SERVICE_URL}/api/cnpj/enrich", json={
+                'website': website,
+                'name': business_name,
+                'city': city,
+                'phone': phone,
+            })
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('cnpj'):
+                    return data
+    except Exception:
+        pass
+    return None
 
 
 @app.post("/api/enrich")
@@ -194,6 +227,25 @@ async def enrich_lead(data: dict):
     if cache_key and cache_key in _cnpj_cache:
         log.warning(f"[ENRICH] Cache HIT for '{cache_key}'")
         return _cnpj_cache[cache_key]
+
+    # Priority 1: Try CNPJ microservice (local DB, instant)
+    if CNPJ_SERVICE_URL:
+        log.warning(f"[ENRICH] Trying CNPJ microservice...")
+        try:
+            loop = asyncio.get_event_loop()
+            cnpj_result = await asyncio.wait_for(
+                loop.run_in_executor(None, _try_cnpj_service, website, business_name, city, phone),
+                timeout=8.0,
+            )
+            if cnpj_result:
+                log.warning(f"[ENRICH] CNPJ service found: {cnpj_result.get('cnpj', '')}")
+                if cache_key:
+                    _cnpj_cache[cache_key] = cnpj_result
+                return cnpj_result
+        except asyncio.TimeoutError:
+            log.warning("[ENRICH] CNPJ service timeout, falling back...")
+        except Exception as e:
+            log.warning(f"[ENRICH] CNPJ service error: {e}")
 
     try:
         loop = asyncio.get_event_loop()

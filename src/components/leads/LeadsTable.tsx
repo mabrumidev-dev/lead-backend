@@ -392,7 +392,7 @@ function LeadDetailModal({ lead, onClose }: { lead: any; onClose: () => void }) 
     }
     if (socialEntries.length > 0) {
       txt += `\n🔗 REDES SOCIAIS\n${line}\n`
-      for (const [p, d] of socialEntries) txt += `  • ${p}: ${d.url}\n`
+      for (const [p, d] of socialEntries) txt += `  • ${p}: ${(d as any).url}\n`
     }
     txt += `\n${sep}\n  Mabrumi CRM Pro\n${sep}\n`
     const blob = new Blob([txt], { type: 'text/plain;charset=utf-8;' })

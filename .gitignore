@@ -57,3 +57,4 @@ con.*
 *.njsproj
 *.sln
 *.sw?
+cnpj_service/data/

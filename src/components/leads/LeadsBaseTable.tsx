@@ -35,16 +35,32 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
   const [batchProgress, setBatchProgress] = useState('')
 
   const computedLeads = useMemo(
-    () =>
-      leads.map(lead => ({
-        ...lead,
-        ageDisplay: lead.age ? `${lead.age} anos` : 'Não informado',
-        statusColor: {
-          new: 'text-red-400',
-          contacted: 'text-yellow-400',
-          qualified: 'text-green-400'
-        }[lead.status] || 'text-slate-400'
-      })),
+    () => {
+      const mapped = leads.map(lead => {
+        const phoneKey = (lead.phone || '').replace(/\D/g, '')
+        const allEnriched = JSON.parse(localStorage.getItem('mabrumi_enriched_leads') || '{}')
+        const enriched = lead.enriched_data || allEnriched[phoneKey] || allEnriched[`lead_${lead.id}`] || null
+        const hasCNPJ = !!(enriched?.CNPJ)
+        const hasData = !!(enriched?.CNPJ || enriched?.RazaoSocial || enriched?.Responsavel)
+        // Prioridade de ordenação: 1=sem dados(vermelho) 2=parcial(amarelo) 3=completo(verde)
+        const sortPriority = hasCNPJ ? 3 : hasData ? 2 : 1
+        return {
+          ...lead,
+          ageDisplay: lead.age ? `${lead.age} anos` : 'Não informado',
+          enriched,
+          hasCNPJ,
+          hasData,
+          sortPriority,
+          statusColor: {
+            new: 'text-red-400',
+            contacted: 'text-yellow-400',
+            qualified: 'text-green-400'
+          }[lead.status] || 'text-slate-400'
+        }
+      })
+      // Ordenar: sem dados primeiro, depois parcial, depois completo
+      return mapped.sort((a, b) => a.sortPriority - b.sortPriority)
+    },
     [leads]
   )
 
@@ -139,6 +155,7 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
               />
             </th>
             <th className="py-3 px-4 text-left">Lead</th>
+            <th className="py-3 px-4 text-left">CNPJ</th>
             <th className="py-3 px-4 text-left">Contato</th>
             <th className="py-3 px-4 text-left">Idade</th>
             <th className="py-3 px-4 text-left">Plano</th>
@@ -149,7 +166,7 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
         </thead>
         <tbody className="divide-y divide-slate-800/50">
           {computedLeads.map((lead) => (
-            <tr key={lead.id} className={`hover:bg-slate-900/30 transition-colors ${selected.has(lead.id) ? 'selected' : ''}`}>
+            <tr key={lead.id} className={`hover:bg-slate-900/30 transition-colors ${selected.has(lead.id) ? 'selected' : ''} ${!lead.hasData ? 'opacity-60 border-l-2 border-l-amber-500/40' : 'border-l-2 border-l-emerald-500/40'}`}>
               <td className="py-3 px-4">
                 <input
                   type="checkbox"
@@ -163,10 +180,26 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
                     <Users size={16} className="text-slate-400" />
                   </div>
                   <div>
-                    <p className="font-medium text-white">{lead.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-white">{lead.name}</p>
+                      {lead.hasCNPJ && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">CNPJ</span>}
+                      {lead.hasData && !lead.hasCNPJ && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">PARCIAL</span>}
+                      {!lead.hasData && <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">SEM DADOS</span>}
+                    </div>
                     <p className="text-xs text-slate-500">{lead.email}</p>
                   </div>
                 </div>
+              </td>
+              <td className="py-3 px-4">
+                {lead.hasCNPJ ? (
+                  <span className="text-emerald-400 text-xs font-mono">
+                    {(() => { const d = (lead.enriched.CNPJ || '').replace(/\D/g, ''); return d.length === 14 ? `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}` : d || '-' })()}
+                  </span>
+                ) : lead.hasData ? (
+                  <span className="text-amber-400 text-[10px]">Parcial</span>
+                ) : (
+                  <span className="text-slate-600 text-[10px]">❌ Sem dados</span>
+                )}
               </td>
               <td className="py-3 px-4">
                 <div className="flex items-center gap-2">

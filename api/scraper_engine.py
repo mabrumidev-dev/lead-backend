@@ -467,6 +467,26 @@ def lookup_cnpj(website_url: str, business_name: str = "", city: str = "", phone
                 log.warning(f"[CNPJ] Strategy 2 error: {e}")
             log.warning(f"[CNPJ] Strategy 2 result: cnpj={cnpj} has_data={biz_data is not None}")
 
+    # Strategy 2b: CNPJ microservice (local DB + fallback APIs)
+    if not cnpj and _left() > 0:
+        clean_name = _clean_business_name(business_name, city)
+        if clean_name:
+            log.warning(f"[CNPJ] Strategy 2b: microservice search for '{clean_name}'...")
+            try:
+                svc_url = os.environ.get('CNPJ_SERVICE_URL', 'http://localhost:8003')
+                resp = requests.get(f"{svc_url}/api/cnpj/busca", params={"nome": clean_name, "limit": 5}, timeout=10)
+                if resp.status_code == 200:
+                    results = resp.json().get('results', [])
+                    if results:
+                        cnpj = results[0]['cnpj']
+                        log.warning(f"[CNPJ] Strategy 2b found: {cnpj} ({results[0].get('razao_social', '')})")
+                        # Buscar dados completos
+                        detail_resp = requests.get(f"{svc_url}/api/cnpj/{cnpj}", timeout=10)
+                        if detail_resp.status_code == 200:
+                            biz_data = detail_resp.json()
+            except Exception as e:
+                log.warning(f"[CNPJ] Strategy 2b error: {e}")
+
     # Strategy 3: Parallel search (Bing + directories) - bounded by remaining budget
     if not cnpj and _left() > 0:
         clean_name = _clean_business_name(business_name, city)

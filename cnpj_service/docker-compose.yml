@@ -1,0 +1,71 @@
+# CNPJ Service - Docker Compose
+# PostgreSQL + API de consulta CNPJ
+#
+# Uso:
+#   docker compose up -d postgres    # Sobe apenas o banco
+#   docker compose up -d              # Sobe banco + API
+#   docker compose exec api python etl.py  # Carrega dados
+#   docker compose logs -f api        # Ver logs da API
+
+version: '3.8'
+
+services:
+  # PostgreSQL com extensão pg_trgm
+  postgres:
+    image: postgres:16-alpine
+    container_name: cnpj-postgres
+    environment:
+      POSTGRES_DB: cnpj
+      POSTGRES_USER: cnpj
+      POSTGRES_PASSWORD: ${CNPJ_DB_PASSWORD:-cnpj}
+    ports:
+      - "${CNPJ_DB_PORT:-5432}:5432"
+    volumes:
+      - cnpj_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    shm_size: 1gb
+    command: >
+      postgres
+        -c shared_buffers=2GB
+        -c work_mem=64MB
+        -c maintenance_work_mem=512MB
+        -c effective_cache_size=4GB
+        -c gin_fuzzy_search_limit=10000
+        -c max_parallel_workers_per_gather=2
+        -c max_parallel_workers=4
+        -c random_page_cost=1.1
+        -c wal_level=minimal
+        -c max_wal_senders=0
+        -c max_connections=50
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cnpj"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # API de consulta CNPJ
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cnpj-api
+    environment:
+      CNPJ_DB_HOST: postgres
+      CNPJ_DB_PORT: "5432"
+      CNPJ_DB_NAME: cnpj
+      CNPJ_DB_USER: cnpj
+      CNPJ_DB_PASSWORD: ${CNPJ_DB_PASSWORD:-cnpj}
+      CNPJ_API_PORT: "8003"
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "${CNPJ_API_PORT:-8003}:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  cnpj_data:
+    driver: local

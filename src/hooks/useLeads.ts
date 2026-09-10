@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/supabase/client'
 import { Lead, FilterOptions } from '@/types/lead'
 
@@ -29,9 +29,11 @@ export const useLeads = (customFilters?: FilterOptions) => {
   const [filters, setFilters] = useState<FilterOptions>({} as FilterOptions)
   const hasFetchedOnce = useRef(false)
 
+  const leadsRef = useRef<Lead[]>([])
+
   const activeFilters = { ...filters, ...customFilters }
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -52,6 +54,7 @@ export const useLeads = (customFilters?: FilterOptions) => {
       }
 
       setLeads(resultLeads)
+      leadsRef.current = resultLeads
       setError(null)
       hasFetchedOnce.current = true
     } catch (err) {
@@ -62,11 +65,11 @@ export const useLeads = (customFilters?: FilterOptions) => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [customFilters?.city, customFilters?.plan, customFilters?.minAge, customFilters?.maxAge])
 
   useEffect(() => {
     fetchLeads()
-  }, [customFilters?.city, customFilters?.plan, customFilters?.minAge, customFilters?.maxAge])
+  }, [fetchLeads])
 
   return {
     leads,
@@ -136,7 +139,7 @@ export const useLeads = (customFilters?: FilterOptions) => {
         const localTrash = JSON.parse(localStorage.getItem('crm_trash') || '[]').map(mapFromSupabase)
         // Merge: DB leads take priority, add localStorage ones not in DB
         const dbIds = new Set(dbLeads.map(l => l.id))
-        return [...dbLeads, ...localTrash.filter(l => !dbIds.has(l.id))]
+        return [...dbLeads, ...localTrash.filter((l: Lead) => !dbIds.has(l.id))]
       } catch {
         // If DB query fails (e.g. no deleted_at column), use localStorage only
         return JSON.parse(localStorage.getItem('crm_trash') || '[]').map(mapFromSupabase)

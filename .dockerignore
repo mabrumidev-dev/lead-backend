@@ -11,3 +11,8 @@ arq_backup_app.jsx
 render.yaml
 *.bat
 *.md
+
+# CNPJ service data (7GB+ — not needed in production image)
+cnpj_service/
+api/venv/
+.opencode/
