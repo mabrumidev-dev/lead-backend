@@ -54,7 +54,11 @@ export const LeadsBaseTable: React.FC<LeadsBaseTableProps> = ({
           statusColor: {
             new: 'text-red-400',
             contacted: 'text-yellow-400',
-            qualified: 'text-green-400'
+            qualified: 'text-green-400',
+            proposal: 'text-blue-400',
+            negotiation: 'text-violet-400',
+            won: 'text-emerald-400',
+            lost: 'text-rose-400',
           }[lead.status] || 'text-slate-400'
         }
       })
