@@ -5,7 +5,11 @@ API de consulta CNPJ com busca fuzzy por nome.
 Endpoints:
     GET  /api/cnpj/{cnpj}           → Busca exata por CNPJ
     GET  /api/cnpj/busca?nome=X     → Busca fuzzy por nome (trigram)
+    GET  /api/cnpj/busca-endereco   → Busca por endereço (CEP, rua, bairro, cidade, UF)
+    GET  /api/cnpj/busca-socio      → Busca por nome de sócio (QSA)
+    GET  /api/cnpj/busca-avancada   → Busca avançada com filtros inteligentes
     POST /api/cnpj/enrich           → Enrichment completo (compatível com backend existente)
+    GET  /api/cnpj/cnae/categorias  → Lista categorias CNAE agrupadas
     GET  /api/cnpj/health           → Health check
 """
 
@@ -1003,6 +1007,403 @@ async def busca_por_endereco(
         import traceback
         traceback.print_exc()
         raise HTTPException(500, f"Erro na busca: {e}")
+
+
+@app.get("/api/cnpj/busca-socio")
+async def busca_por_socio(
+    nome: str = Query(..., min_length=3, description='Nome do sócio (mínimo 3 chars)'),
+    uf: str = Query('', description='Filtrar por UF'),
+    municipio: str = Query('', description='Filtrar por município'),
+    limit: int = Query(20, ge=1, le=100, description='Limite de resultados')
+):
+    """
+    Busca empresas por nome de sócio no QSA (Quadro Societário).
+    Útil para encontrar todas as empresas de uma pessoa.
+    """
+    try:
+        with get_cursor() as cur:
+            cur.execute("SELECT set_limit(0.3)")
+
+            wheres = ["q.nome_socio %% %s", "e.situacao_cadastral = '02'", "e.cnpj_ordem = '0001'"]
+            params: list = [nome.strip()]
+
+            if uf:
+                wheres.append("e.uf = %s")
+                params.append(uf.upper())
+            if municipio:
+                wheres.append("e.municipio ILIKE %s")
+                params.append(f"%{municipio}%")
+
+            where_clause = " AND ".join(wheres)
+            params.append(limit)
+
+            cur.execute(f"""
+                SELECT DISTINCT
+                    e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
+                    emp.razao_social,
+                    e.nome_fantasia,
+                    e.uf,
+                    e.municipio,
+                    e.bairro,
+                    e.logradouro,
+                    e.cep,
+                    e.telefone_1,
+                    e.cnae_fiscal_descricao,
+                    emp.porte,
+                    emp.capital_social,
+                    q.nome_socio,
+                    q.codigo_qualificacao,
+                    similarity(q.nome_socio, %s) AS score
+                FROM qsa q
+                INNER JOIN estabelecimento e ON q.cnpj_basico = e.cnpj_basico
+                INNER JOIN empresa emp ON e.cnpj_basico = emp.cnpj
+                WHERE {where_clause}
+                ORDER BY score DESC
+                LIMIT %s
+            """, [nome.strip()] + params)
+
+            rows = cur.fetchall()
+            results = []
+            for row in rows:
+                results.append({
+                    'cnpj': row['cnpj'],
+                    'razao_social': row['razao_social'] or '',
+                    'nome_fantasia': row['nome_fantasia'] or '',
+                    'uf': row['uf'] or '',
+                    'municipio': row['municipio'] or '',
+                    'bairro': row['bairro'] or '',
+                    'logradouro': row['logradouro'] or '',
+                    'cep': row['cep'] or '',
+                    'telefone': row['telefone_1'] or '',
+                    'atividade': row['cnae_fiscal_descricao'] or '',
+                    'porte': row['porte'] or '',
+                    'capital_social': float(row['capital_social']) if row['capital_social'] else None,
+                    'socio_encontrado': row['nome_socio'] or '',
+                    'qualificacao_socio': row['codigo_qualificacao'] or '',
+                    'similaridade': round(float(row['score']), 2),
+                })
+
+            return {
+                'total': len(results),
+                'socio_busca': nome,
+                'results': results
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Erro na busca por sócio: {e}")
+        raise HTTPException(500, f"Erro na busca: {e}")
+
+
+@app.get("/api/cnpj/busca-avancada")
+async def busca_avancada(
+    # Filtros de localização
+    uf: str = Query('', description='UF'),
+    municipio: str = Query('', description='Município'),
+    bairro: str = Query('', description='Bairro'),
+    cep: str = Query('', description='CEP'),
+    # Filtros de negócio
+    cnae_categoria: str = Query('', description='Categoria CNAE (ex: saude, comercio, servicos, industria, alimentacao)'),
+    cnae: str = Query('', description='Código CNAE específico'),
+    # Filtros inteligentes
+    porte: str = Query('', description='Porte (01=ME, 03=EPP, 05=Demais)'),
+    capital_min: float = Query(0, description='Capital social mínimo'),
+    capital_max: float = Query(0, description='Capital social máximo (0 = sem limite)'),
+    idade_min: int = Query(0, description='Idade mínima da empresa em anos'),
+    idade_max: int = Query(0, description='Idade máxima da empresa em anos (0 = sem limite)'),
+    apenas_matriz: bool = Query(False, description='Apenas empresas matriz (sede)'),
+    apenas_filial: bool = Query(False, description='Apenas filiais'),
+    tem_simples: bool = Query(False, description='Optante do Simples Nacional'),
+    tem_mei: bool = Query(False, description='Optante do MEI'),
+    tem_telefone: bool = Query(False, description='Apenas empresas com telefone'),
+    tem_email: bool = Query(False, description='Apenas empresas com email'),
+    # Scoring
+    prospect_score_min: int = Query(0, description='Score mínimo de prospect (0-100)'),
+    # Controle
+    situacao: str = Query('02', description='Situação cadastral'),
+    order_by: str = Query('score', description='Ordenar por: score, capital, cidade, cnae'),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """
+    Busca avançada com filtros inteligentes.
+    Combina localização, negócio e scoring para encontrar prospects ideais.
+    """
+    # Pelo menos um filtro obrigatório
+    if not any([uf, municipio, bairro, cep, cnae_categoria, cnae]):
+        raise HTTPException(400, "Informe pelo menos um filtro: uf, municipio, bairro, cep, cnae_categoria ou cnae")
+
+    cep_clean = re.sub(r'\D', '', cep) if cep else ''
+
+    # Mapeamento de categorias CNAE para ranges de código
+    CNAE_CATEGORIAS = {
+        'saude': ['86', '861', '862', '863', '864', '865', '866', '869', '87', '871', '872', '873'],
+        'odontologia': ['8630', '86305'],
+        'farmacia': ['4771', '47717', '4772', '47725'],
+        'clinica': ['8630', '8640', '8650', '8610', '8621', '8622'],
+        'hospital': ['8610', '86101', '86102', '8621', '8622'],
+        'laboratorio': ['8640', '86402'],
+        'comercio': ['47', '45', '451', '452', '453', '454', '46', '471', '472', '473', '474', '475', '476', '477', '478'],
+        'restaurante': ['5611', '56112', '5612', '56121'],
+        'alimentacao': ['56', '561', '562', '5611', '5612', '5620'],
+        'advocacia': ['6911', '69117'],
+        'contabilidade': ['6920', '69206'],
+        'consultoria': ['7020', '70204'],
+        'imobiliaria': ['6810', '68102', '6821', '68218', '6822', '68226'],
+        'construcao': ['41', '412', '4120', '42', '421', '422', '429', '43', '431', '432', '433', '439'],
+        'educacao': ['85', '851', '852', '853', '854', '855', '859'],
+        'escola': ['8520', '85201'],
+        'academia': ['9313', '93131', '9319', '93198'],
+        'petshop': ['9609', '96092'],
+        'salao': ['9602', '96022'],
+        'tecnologia': ['62', '6201', '6202', '6203', '6204', '6311', '6312', '6313', '6314', '6319'],
+        'ti': ['62', '6201', '6202', '6203', '6204'],
+        'software': ['6201', '62015', '6202', '62023'],
+        'marketing': ['7311', '7312', '7319', '1813', '18130'],
+        'transporte': ['49', '491', '492', '493', '494', '495'],
+        'logistica': ['5250', '52508', '4929', '49299'],
+        'industria': ['10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33'],
+        'automotivo': ['4511', '4512', '4520', '4530', '4541', '4542', '4930', '49302'],
+        'seguros': ['6511', '65111', '6512', '65128', '6621', '66215', '6622', '66223'],
+        'corretora': ['6621', '66215', '6622', '66223'],
+        'financeiro': ['64', '642', '643', '644', '645', '646', '649', '65', '651', '652', '66'],
+        'hotel': ['5510', '55108', '5590', '55906'],
+        'turismo': ['7911', '79112', '7912', '79121'],
+        'eventos': ['8230', '82300', '9001', '90019'],
+        'beleza': ['9602', '96022', '9609', '96092'],
+    }
+
+    try:
+        with get_cursor() as cur:
+            cur.execute("SELECT set_limit(0.3)")
+
+            wheres = ["e.situacao_cadastral = %s", "e.cnpj_ordem = '0001'"]
+            params: list = [situacao]
+
+            # Localização
+            if cep_clean:
+                wheres.append("e.cep = %s")
+                params.append(cep_clean)
+            if uf:
+                wheres.append("e.uf = %s")
+                params.append(uf.upper())
+            if municipio:
+                wheres.append("e.municipio ILIKE %s")
+                params.append(f"%{municipio}%")
+            if bairro:
+                wheres.append("e.bairro ILIKE %s")
+                params.append(f"%{bairro}%")
+
+            # CNAE
+            if cnae:
+                wheres.append("e.cnae_fiscal = %s")
+                params.append(cnae)
+            elif cnae_categoria:
+                cat = cnae_categoria.lower().strip()
+                if cat in CNAE_CATEGORIAS:
+                    codes = CNAE_CATEGORIAS[cat]
+                    placeholders = ','.join(['%s'] * len(codes))
+                    wheres.append(f"e.cnae_fiscal IN ({placeholders})")
+                    params.extend(codes)
+                else:
+                    wheres.append("e.cnae_fiscal ILIKE %s")
+                    params.append(f"{cnae_categoria}%")
+
+            # Porte
+            if porte:
+                wheres.append("emp.porte = %s")
+                params.append(porte)
+
+            # Capital social
+            if capital_min > 0:
+                wheres.append("emp.capital_social >= %s")
+                params.append(capital_min)
+            if capital_max > 0:
+                wheres.append("emp.capital_social <= %s")
+                params.append(capital_max)
+
+            # Idade da empresa
+            if idade_min > 0:
+                wheres.append("e.data_inicio_atividade <= CURRENT_DATE - INTERVAL '%s years'")
+                params.append(idade_min)
+            if idade_max > 0:
+                wheres.append("e.data_inicio_atividade >= CURRENT_DATE - INTERVAL '%s years'")
+                params.append(idade_max)
+
+            # Matriz/Filial
+            if apenas_matriz:
+                wheres.append("e.identificador_matriz_filial = '1'")
+            elif apenas_filial:
+                wheres.append("e.identificador_matriz_filial = '2'")
+
+            # Simples/MEI
+            if tem_simples:
+                wheres.append("emp.opcao_simples = true")
+            if tem_mei:
+                wheres.append("emp.opcao_mei = true")
+
+            # Contato
+            if tem_telefone:
+                wheres.append("(e.telefone_1 IS NOT NULL AND e.telefone_1 != '')")
+            if tem_email:
+                wheres.append("(e.email IS NOT NULL AND e.email != '')")
+
+            where_clause = " AND ".join(wheres)
+
+            # Prospect Score calculation:
+            # - Porte: ME/EPP = +20, Demais = +10
+            # - Capital > 100K = +15, > 500K = +25
+            # - Idade > 5 anos = +15, > 10 anos = +20
+            # - Tem telefone = +10
+            # - Tem email = +5
+            # - Matriz = +10, Filial = +5
+            # - CNAE saude/seguros/corretora = +15
+            score_expr = """
+                (
+                    CASE WHEN emp.porte IN ('01', '03') THEN 20 ELSE 10 END
+                    + CASE WHEN emp.capital_social > 500000 THEN 25 WHEN emp.capital_social > 100000 THEN 15 ELSE 0 END
+                    + CASE WHEN e.data_inicio_atividade <= CURRENT_DATE - INTERVAL '10 years' THEN 20 WHEN e.data_inicio_atividade <= CURRENT_DATE - INTERVAL '5 years' THEN 15 ELSE 5 END
+                    + CASE WHEN e.telefone_1 IS NOT NULL AND e.telefone_1 != '' THEN 10 ELSE 0 END
+                    + CASE WHEN e.email IS NOT NULL AND e.email != '' THEN 5 ELSE 0 END
+                    + CASE WHEN e.identificador_matriz_filial = '1' THEN 10 WHEN e.identificador_matriz_filial = '2' THEN 5 ELSE 0 END
+                    + CASE WHEN e.cnae_fiscal LIKE '86%%' OR e.cnae_fiscal LIKE '6511%%' OR e.cnae_fiscal LIKE '6621%%' THEN 15 ELSE 0 END
+                )
+            """
+
+            # Order by
+            order_map = {
+                'score': f"score DESC",
+                'capital': f"emp.capital_social DESC NULLS LAST",
+                'cidade': f"e.municipio ASC",
+                'cnae': f"e.cnae_fiscal ASC",
+            }
+            order_clause = order_map.get(order_by, 'score DESC')
+
+            query = f"""
+                SELECT
+                    e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
+                    emp.razao_social,
+                    e.nome_fantasia,
+                    e.tipo_logradouro, e.logradouro, e.numero, e.complemento,
+                    e.bairro, e.cep, e.uf, e.municipio,
+                    e.telefone_1, e.telefone_2, e.email,
+                    e.cnae_fiscal, e.cnae_fiscal_descricao,
+                    e.situacao_cadastral,
+                    emp.porte, emp.capital_social, emp.natureza_juridica,
+                    emp.opcao_simples, emp.opcao_mei,
+                    e.identificador_matriz_filial,
+                    e.data_inicio_atividade,
+                    {score_expr} AS prospect_score
+                FROM estabelecimento e
+                LEFT JOIN empresa emp ON e.cnpj_basico = emp.cnpj
+                WHERE {where_clause}
+                {f"AND {score_expr} >= %s" if prospect_score_min > 0 else ""}
+                ORDER BY {order_clause}
+                LIMIT %s
+            """
+
+            if prospect_score_min > 0:
+                params.append(prospect_score_min)
+            params.append(limit)
+
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+            results = []
+            for row in rows:
+                idade_anos = 0
+                if row['data_inicio_atividade']:
+                    from datetime import date
+                    delta = date.today() - row['data_inicio_atividade']
+                    idade_anos = delta.days // 365
+
+                results.append({
+                    'cnpj': row['cnpj'],
+                    'razao_social': row['razao_social'] or '',
+                    'nome_fantasia': row['nome_fantasia'] or '',
+                    'endereco': f"{row['tipo_logradouro'] or ''} {row['logradouro'] or ''}, {row['numero'] or 'S/N'}".strip(),
+                    'bairro': row['bairro'] or '',
+                    'cep': row['cep'] or '',
+                    'uf': row['uf'] or '',
+                    'municipio': row['municipio'] or '',
+                    'telefone': row['telefone_1'] or '',
+                    'email': row['email'] or '',
+                    'cnae_fiscal': row['cnae_fiscal'] or '',
+                    'atividade': row['cnae_fiscal_descricao'] or '',
+                    'situacao': row['situacao_cadastral'] or '',
+                    'porte': row['porte'] or '',
+                    'capital_social': float(row['capital_social']) if row['capital_social'] else None,
+                    'natureza_juridica': row['natureza_juridica'] or '',
+                    'simples': row['opcao_simples'],
+                    'mei': row['opcao_mei'],
+                    'tipo': 'Matriz' if row['identificador_matriz_filial'] == '1' else 'Filial' if row['identificador_matriz_filial'] == '2' else '',
+                    'data_inicio': str(row['data_inicio_atividade']) if row['data_inicio_atividade'] else '',
+                    'idade_anos': idade_anos,
+                    'prospect_score': int(row['prospect_score']),
+                })
+
+            return {
+                'total': len(results),
+                'filtros': {
+                    'uf': uf or None, 'municipio': municipio or None, 'bairro': bairro or None,
+                    'cnae_categoria': cnae_categoria or None, 'cnae': cnae or None,
+                    'porte': porte or None, 'capital_range': f"{capital_min}-{capital_max}" if capital_min or capital_max else None,
+                    'idade_range': f"{idade_min}-{idade_max}" if idade_min or idade_max else None,
+                    'apenas_matriz': apenas_matriz or None, 'tem_telefone': tem_telefone or None,
+                    'prospect_score_min': prospect_score_min or None,
+                },
+                'results': results
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Erro na busca avançada: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Erro na busca: {e}")
+
+
+@app.get("/api/cnpj/cnae/categorias")
+async def listar_categorias_cnae():
+    """Lista as categorias CNAE disponíveis para busca avançada."""
+    CNAE_CATEGORIAS = {
+        'saude': {'label': 'Saúde', 'descricao': 'Hospitais, clínicas, laboratórios, farmácias', 'count': 13},
+        'odontologia': {'label': 'Odontologia', 'descricao': 'Dentistas e clínicas odontológicas', 'count': 2},
+        'farmacia': {'label': 'Farmácia', 'descricao': 'Farmácias e drogarias', 'count': 4},
+        'clinica': {'label': 'Clínica', 'descricao': 'Clínicas médicas e especializadas', 'count': 6},
+        'hospital': {'label': 'Hospital', 'descricao': 'Hospitais e pronto-socorros', 'count': 5},
+        'laboratorio': {'label': 'Laboratório', 'descricao': 'Laboratórios de análises', 'count': 2},
+        'comercio': {'label': 'Comércio', 'descricao': 'Comércio varejista e atacadista', 'count': 18},
+        'restaurante': {'label': 'Restaurante', 'descricao': 'Restaurantes, bares e lanchonetes', 'count': 4},
+        'alimentacao': {'label': 'Alimentação', 'descricao': 'Setor alimentício completo', 'count': 7},
+        'advocacia': {'label': 'Advocacia', 'descricao': 'Escritórios de advocacia', 'count': 2},
+        'contabilidade': {'label': 'Contabilidade', 'descricao': 'Contadores e escritórios contábeis', 'count': 2},
+        'consultoria': {'label': 'Consultoria', 'descricao': 'Consultoria empresarial', 'count': 2},
+        'imobiliaria': {'label': 'Imobiliária', 'descricao': 'Imobiliárias e gestão de imóveis', 'count': 5},
+        'construcao': {'label': 'Construção', 'descricao': 'Construção civil', 'count': 13},
+        'educacao': {'label': 'Educação', 'descricao': 'Escolas, faculdades, cursos', 'count': 7},
+        'escola': {'label': 'Escola', 'descricao': 'Escolas de ensino fundamental e médio', 'count': 2},
+        'academia': {'label': 'Academia', 'descricao': 'Academias e atividades físicas', 'count': 4},
+        'petshop': {'label': 'Pet Shop', 'descricao': 'Pet shops e cuidados animais', 'count': 2},
+        'salao': {'label': 'Salão', 'descricao': 'Salões de beleza e barbearias', 'count': 2},
+        'tecnologia': {'label': 'Tecnologia', 'descricao': 'TI, software, dados', 'count': 14},
+        'ti': {'label': 'TI', 'descricao': 'Tecnologia da informação', 'count': 5},
+        'software': {'label': 'Software', 'descricao': 'Desenvolvimento de software', 'count': 4},
+        'marketing': {'label': 'Marketing', 'descricao': 'Agências de marketing e publicidade', 'count': 4},
+        'transporte': {'label': 'Transporte', 'descricao': 'Transporte de passageiros e carga', 'count': 5},
+        'logistica': {'label': 'Logística', 'descricao': 'Logística e armazenagem', 'count': 3},
+        'industria': {'label': 'Indústria', 'descricao': 'Indústria de transformação', 'count': 24},
+        'automotivo': {'label': 'Automotivo', 'descricao': 'Concessionárias, oficinas, peças', 'count': 7},
+        'seguros': {'label': 'Seguros', 'descricao': 'Seguros, corretoras, previdência', 'count': 6},
+        'corretora': {'label': 'Corretora', 'descricao': 'Corretoras de seguros e títulos', 'count': 4},
+        'financeiro': {'label': 'Financeiro', 'descricao': 'Bancos, financeiras, investimentos', 'count': 13},
+        'hotel': {'label': 'Hotel', 'descricao': 'Hotéis e hospedagens', 'count': 3},
+        'turismo': {'label': 'Turismo', 'descricao': 'Agências de turismo', 'count': 3},
+        'eventos': {'label': 'Eventos', 'descricao': 'Eventos e entretenimento', 'count': 3},
+        'beleza': {'label': 'Beleza', 'descricao': 'Cosméticos e tratamentos estéticos', 'count': 4},
+    }
+    return {'categorias': CNAE_CATEGORIAS}
 
 
 @app.get("/api/cnpj/{cnpj}")
