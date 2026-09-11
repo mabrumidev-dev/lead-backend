@@ -3,7 +3,7 @@ import { Search, MapPin, Building2, Phone, Mail, Star, Loader2, Filter, ChevronD
 import { supabase } from '@/hooks/useLeads'
 import { Lead } from '@/types/lead'
 
-const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.port !== '5173' ? window.location.origin : 'http://localhost:8002')
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 interface AddressResult {
   cnpj: string

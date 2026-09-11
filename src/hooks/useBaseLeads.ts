@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/supabase/client'
 import { Lead } from '@/types/lead'
 
-const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.port !== '5173' ? window.location.origin : 'http://localhost:8002')
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
 // Local storage keys for trash persistence
 const TRASH_KEY = 'mabrumi_trashed_leads'
