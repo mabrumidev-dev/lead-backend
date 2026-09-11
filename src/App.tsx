@@ -1,5 +1,5 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
-import { Search, Users, Send, LogOut, Shield, Target, Database, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu, Trash2 } from 'lucide-react'
+import { Search, Users, Send, LogOut, Shield, Target, Database, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu, Trash2, Globe, MapPin } from 'lucide-react'
 import { useLeads } from './hooks/useLeads'
 import { useBaseLeads } from './hooks/useBaseLeads'
 import { LeadsFilters } from './components/leads/LeadsFilters'
@@ -10,6 +10,7 @@ import { ImportLeads } from './components/leads/ImportLeads'
 import { GoogleMapsScraper } from './components/leads/GoogleMapsScraper'
 import { TrashView } from './components/leads/TrashView'
 import { VisionUpload } from './components/leads/vision/VisionUpload'
+import AddressSearch from './components/leads/AddressSearch'
 import { supabase } from './hooks/useLeads'
 import { FilterOptions, INITIAL_FILTERS } from './types/lead'
 
@@ -136,7 +137,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: any[]; onRemove: (id: nu
 function App() {
   const [isLogged, setIsLogged] = useState<boolean>(false)
   const [userId, setUserId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'buscar' | 'base' | 'disparo' | 'importar' | 'scraper' | 'lixeira'>('buscar')
+  const [activeTab, setActiveTab] = useState<'buscar' | 'base' | 'disparo' | 'importar' | 'scraper' | 'lixeira' | 'address'>('address')
   const [activeFiltersState, setActiveFiltersState] = useState<FilterOptions>(INITIAL_FILTERS)
   const [toasts, setToasts] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -221,6 +222,15 @@ function App() {
   };
 
   const getTabContent = () => {
+    if (activeTab === 'address') {
+      return (
+        <AddressSearch
+          onAddToBase={handleAddToBase}
+          showToast={showToast}
+          baseLeadIds={baseLeads.map(l => l.id)}
+        />
+      )
+    }
     if (activeTab === 'buscar') {
       return (
         <div className="space-y-4">
@@ -253,14 +263,15 @@ function App() {
         <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900 p-4 flex-col transform transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <div className="flex items-center gap-3 mb-10"><LogoIcon /><div><h1 className="font-bold text-lg">MABRUMI</h1><p className="text-xs text-slate-400">CORRETORA</p></div></div>
           <nav className="space-y-2">
-            <button onClick={() => { setActiveTab('buscar'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded ${activeTab === 'buscar' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400'}`}><Search size={18} /> Buscar Leads</button>
-            <button onClick={() => { setActiveTab('base'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded ${activeTab === 'base' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400'}`}><Users size={18} /> Base de Leads</button>
-            <button onClick={() => { setActiveTab('disparo'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded ${activeTab === 'disparo' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400'}`}><Send size={18} /> Disparo WhatsApp</button>
+            <button onClick={() => { setActiveTab('address'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'address' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><MapPin size={18} /> Busca Inteligente</button>
+            <button onClick={() => { setActiveTab('buscar'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'buscar' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Search size={18} /> Buscar Leads</button>
+            <button onClick={() => { setActiveTab('base'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'base' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Users size={18} /> Base de Leads</button>
+            <button onClick={() => { setActiveTab('disparo'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'disparo' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Send size={18} /> Disparo WhatsApp</button>
             <div className="border-t border-slate-800 my-2" />
-            <button onClick={() => { setActiveTab('scraper'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded ${activeTab === 'scraper' ? 'bg-green-500/20 text-green-400' : 'text-slate-400'}`}><Map size={18} /> Google Maps</button>
-            <button onClick={() => { setActiveTab('importar'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded ${activeTab === 'importar' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400'}`}><Upload size={18} /> Importar CSV</button>
+            <button onClick={() => { setActiveTab('scraper'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'scraper' ? 'bg-green-500/20 text-green-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Globe size={18} /> Google Maps</button>
+            <button onClick={() => { setActiveTab('importar'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'importar' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Upload size={18} /> Importar CSV</button>
             <div className="border-t border-slate-800 my-2" />
-            <button onClick={() => { setActiveTab('lixeira'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded ${activeTab === 'lixeira' ? 'bg-red-500/20 text-red-400' : 'text-slate-400'}`}><Trash2 size={18} /> Lixeira {trashedLeads.length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500/30 text-red-400 text-[10px] font-bold">{trashedLeads.length}</span>}</button>
+            <button onClick={() => { setActiveTab('lixeira'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'lixeira' ? 'bg-red-500/20 text-red-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Trash2 size={18} /> Lixeira {trashedLeads.length > 0 && <span className="ml-auto px-1.5 py-0.5 rounded-full bg-red-500/30 text-red-400 text-[10px] font-bold">{trashedLeads.length}</span>}</button>
           </nav>
           <button onClick={() => { supabase.auth.signOut(); setIsLogged(false); }} className="mt-auto flex items-center gap-3 p-3 text-slate-400 hover:text-red-400"><LogOut size={18} /> Sair</button>
         </aside>

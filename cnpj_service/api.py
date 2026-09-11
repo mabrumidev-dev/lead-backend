@@ -853,6 +853,158 @@ async def busca_por_nome(
         raise HTTPException(500, f"Erro na busca: {e}")
 
 
+@app.get("/api/cnpj/busca-endereco")
+async def busca_por_endereco(
+    cep: str = Query('', description='CEP (8 dígitos, com ou sem hífen)'),
+    logradouro: str = Query('', description='Nome da rua/avenida (mínimo 2 chars)'),
+    bairro: str = Query('', description='Bairro'),
+    municipio: str = Query('', description='Município'),
+    uf: str = Query('', description='UF (2 letras, ex: SP, RJ)'),
+    cnae: str = Query('', description='Código CNAE da atividade econômica'),
+    porte: str = Query('', description='Porte da empresa (01=ME, 03=EPP, 05=Demais)'),
+    situacao: str = Query('02', description='Situação cadastral (02=Ativa)'),
+    limit: int = Query(20, ge=1, le=100, description='Limite de resultados')
+):
+    """
+    Busca empresas por endereço.
+    Permite buscar por CEP, rua, bairro, município e UF.
+    Retorna empresas ativas com dados completos.
+    """
+    # Validar que pelo menos um filtro foi informado
+    if not any([cep, logradouro, bairro, municipio, uf]):
+        raise HTTPException(400, "Informe pelo menos um filtro: cep, logradouro, bairro, municipio ou uf")
+
+    cep_clean = re.sub(r'\D', '', cep) if cep else ''
+    if cep_clean and len(cep_clean) != 8:
+        raise HTTPException(400, "CEP deve ter 8 dígitos")
+
+    try:
+        with get_cursor() as cur:
+            # Build WHERE clauses dynamically
+            wheres = []
+            params = []
+
+            if cep_clean:
+                wheres.append("e.cep = %s")
+                params.append(cep_clean)
+
+            if logradouro and len(logradouro) >= 2:
+                # Use trigram for fuzzy matching on street names
+                cur.execute("SELECT set_limit(0.3)")
+                wheres.append("e.logradouro %% %s")
+                params.append(logradouro.strip())
+
+            if bairro:
+                wheres.append("e.bairro ILIKE %s")
+                params.append(f"%{bairro.strip()}%")
+
+            if municipio:
+                wheres.append("e.municipio ILIKE %s")
+                params.append(f"%{municipio.strip()}%")
+
+            if uf:
+                wheres.append("e.uf = %s")
+                params.append(uf.upper().strip())
+
+            if situacao:
+                wheres.append("e.situacao_cadastral = %s")
+                params.append(situacao)
+
+            if cnae:
+                wheres.append("e.cnae_fiscal = %s")
+                params.append(cnae.strip())
+
+            where_clause = " AND ".join(wheres) if wheres else "1=1"
+
+            query = f"""
+                SELECT
+                    e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
+                    e.nome_fantasia,
+                    emp.razao_social,
+                    e.tipo_logradouro,
+                    e.logradouro,
+                    e.numero,
+                    e.complemento,
+                    e.bairro,
+                    e.cep,
+                    e.uf,
+                    e.municipio,
+                    e.telefone_1,
+                    e.telefone_2,
+                    e.email,
+                    e.cnae_fiscal,
+                    e.cnae_fiscal_descricao,
+                    e.situacao_cadastral,
+                    emp.porte,
+                    emp.capital_social,
+                    emp.natureza_juridica,
+                    emp.opcao_simples,
+                    emp.opcao_mei,
+                    e.identificador_matriz_filial,
+                    e.data_inicio_atividade
+                FROM estabelecimento e
+                LEFT JOIN empresa emp ON e.cnpj_basico = emp.cnpj
+                WHERE {where_clause}
+                ORDER BY e.logradouro, e.numero
+                LIMIT %s
+            """
+            params.append(limit)
+
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+            results = []
+            for row in rows:
+                endereco = f"{row['tipo_logradouro'] or ''} {row['logradouro'] or ''}, {row['numero'] or 'S/N'}"
+                if row['complemento']:
+                    endereco += f" - {row['complemento']}"
+                results.append({
+                    'cnpj': row['cnpj'],
+                    'razao_social': row['razao_social'] or '',
+                    'nome_fantasia': row['nome_fantasia'] or '',
+                    'endereco': endereco.strip(),
+                    'bairro': row['bairro'] or '',
+                    'cep': row['cep'] or '',
+                    'uf': row['uf'] or '',
+                    'municipio': row['municipio'] or '',
+                    'telefone_1': row['telefone_1'] or '',
+                    'telefone_2': row['telefone_2'] or '',
+                    'email': row['email'] or '',
+                    'cnae_fiscal': row['cnae_fiscal'] or '',
+                    'cnae_fiscal_descricao': row['cnae_fiscal_descricao'] or '',
+                    'situacao_cadastral': row['situacao_cadastral'] or '',
+                    'porte': row['porte'] or '',
+                    'capital_social': float(row['capital_social']) if row['capital_social'] else None,
+                    'natureza_juridica': row['natureza_juridica'] or '',
+                    'opcao_simples': row['opcao_simples'],
+                    'opcao_mei': row['opcao_mei'],
+                    'identificador_matriz_filial': row['identificador_matriz_filial'] or '',
+                    'data_inicio_atividade': str(row['data_inicio_atividade']) if row['data_inicio_atividade'] else '',
+                })
+
+            return {
+                'total': len(results),
+                'filtros': {
+                    'cep': cep_clean or None,
+                    'logradouro': logradouro or None,
+                    'bairro': bairro or None,
+                    'municipio': municipio or None,
+                    'uf': uf.upper() if uf else None,
+                    'cnae': cnae or None,
+                    'situacao': situacao,
+                },
+                'results': results
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Erro na busca por endereço: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Erro na busca: {e}")
+
+
 @app.get("/api/cnpj/{cnpj}")
 async def lookup_cnpj(cnpj: str):
     """Busca exata por CNPJ."""
