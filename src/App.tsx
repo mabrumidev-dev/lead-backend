@@ -1,5 +1,5 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
-import { Search, Users, Send, LogOut, Shield, Target, Database, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu, Trash2, Globe, MapPin, BarChart3 } from 'lucide-react'
+import { Search, Users, Send, LogOut, Shield, Target, Database, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu, Trash2, Globe, MapPin, BarChart3, TrendingUp } from 'lucide-react'
 import { useLeads } from './hooks/useLeads'
 import { useBaseLeads } from './hooks/useBaseLeads'
 import { LeadsFilters } from './components/leads/LeadsFilters'
@@ -12,6 +12,7 @@ import { TrashView } from './components/leads/TrashView'
 import { VisionUpload } from './components/leads/vision/VisionUpload'
 import AddressSearch from './components/leads/AddressSearch'
 import DashboardBI from './components/dashboard/DashboardBI'
+import PipelineKanban from './components/leads/PipelineKanban'
 import { supabase } from './hooks/useLeads'
 import { FilterOptions, INITIAL_FILTERS } from './types/lead'
 
@@ -138,7 +139,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: any[]; onRemove: (id: nu
 function App() {
   const [isLogged, setIsLogged] = useState<boolean>(false)
   const [userId, setUserId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'buscar' | 'base' | 'disparo' | 'importar' | 'scraper' | 'lixeira' | 'address'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'buscar' | 'base' | 'disparo' | 'importar' | 'scraper' | 'lixeira' | 'address'>('dashboard')
   const [activeFiltersState, setActiveFiltersState] = useState<FilterOptions>(INITIAL_FILTERS)
   const [toasts, setToasts] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -252,6 +253,9 @@ function App() {
     }
     if (activeTab === 'base') return <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onTrashLead={handleTrashLead} onReprocessLead={handleReprocessLead} onBatchReprocess={handleBatchReprocess} />;
     if (activeTab === 'lixeira') return <TrashView trashedLeads={trashedLeads} onRestore={handleRestoreLead} onPermanentDelete={handlePermanentDelete} />;
+    if (activeTab === 'pipeline') {
+      return <PipelineKanban leads={baseLeads} onStatusChange={(id, s) => updateLeadStatus(id, s)} onTrashLead={handleTrashLead} showToast={showToast} />
+    }
     if (activeTab === 'disparo') return <LeadsDispatchWhatsApp leads={baseLeads as any} onClose={() => setActiveTab('base')} onStatusChange={(id, s) => updateLeadStatus(id, s)} onRemoveFromBase={handleTrashLead} />;
     if (activeTab === 'importar') return <ImportLeads onImportComplete={(_l) => { showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} onBack={() => setActiveTab('buscar')} />;
     if (activeTab === 'scraper') return <GoogleMapsScraper onImportComplete={async (importedLeads) => { for (const l of importedLeads) { await addLeadToBase(l); } showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} showToast={showToast} />;
@@ -271,6 +275,7 @@ function App() {
             <button onClick={() => { setActiveTab('address'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'address' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><MapPin size={18} /> Busca Inteligente</button>
             <button onClick={() => { setActiveTab('buscar'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'buscar' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Search size={18} /> Buscar Leads</button>
             <button onClick={() => { setActiveTab('base'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'base' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Users size={18} /> Base de Leads</button>
+            <button onClick={() => { setActiveTab('pipeline'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'pipeline' ? 'bg-violet-500/20 text-violet-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><TrendingUp size={18} /> Pipeline</button>
             <button onClick={() => { setActiveTab('disparo'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'disparo' ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Send size={18} /> Disparo WhatsApp</button>
             <div className="border-t border-slate-800 my-2" />
             <button onClick={() => { setActiveTab('scraper'); setSidebarOpen(false) }} className={`w-full text-left p-3 rounded flex items-center gap-3 ${activeTab === 'scraper' ? 'bg-green-500/20 text-green-400' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'}`}><Globe size={18} /> Google Maps</button>
