@@ -212,6 +212,158 @@ def _try_cnpj_service(website: str, business_name: str, city: str, phone: str) -
     return None
 
 
+# ── CNPJ Search Endpoints (proxy to CNPJ microservice) ──
+
+CNAE_CATEGORIAS = {
+    'saude': {'label': 'Saúde', 'descricao': 'Hospitais, clínicas, laboratórios, farmácias'},
+    'odontologia': {'label': 'Odontologia', 'descricao': 'Dentistas e clínicas odontológicas'},
+    'farmacia': {'label': 'Farmácia', 'descricao': 'Farmácias e drogarias'},
+    'clinica': {'label': 'Clínica', 'descricao': 'Clínicas médicas e especializadas'},
+    'hospital': {'label': 'Hospital', 'descricao': 'Hospitais e pronto-socorros'},
+    'laboratorio': {'label': 'Laboratório', 'descricao': 'Laboratórios de análises'},
+    'comercio': {'label': 'Comércio', 'descricao': 'Comércio varejista e atacadista'},
+    'restaurante': {'label': 'Restaurante', 'descricao': 'Restaurantes, bares e lanchonetes'},
+    'alimentacao': {'label': 'Alimentação', 'descricao': 'Setor alimentício completo'},
+    'advocacia': {'label': 'Advocacia', 'descricao': 'Escritórios de advocacia'},
+    'contabilidade': {'label': 'Contabilidade', 'descricao': 'Contadores e escritórios contábeis'},
+    'consultoria': {'label': 'Consultoria', 'descricao': 'Consultoria empresarial'},
+    'imobiliaria': {'label': 'Imobiliária', 'descricao': 'Imobiliárias e gestão de imóveis'},
+    'construcao': {'label': 'Construção', 'descricao': 'Construção civil'},
+    'educacao': {'label': 'Educação', 'descricao': 'Escolas, faculdades, cursos'},
+    'escola': {'label': 'Escola', 'descricao': 'Escolas de ensino fundamental e médio'},
+    'academia': {'label': 'Academia', 'descricao': 'Academias e atividades físicas'},
+    'petshop': {'label': 'Pet Shop', 'descricao': 'Pet shops e cuidados animais'},
+    'salao': {'label': 'Salão', 'descricao': 'Salões de beleza e barbearias'},
+    'tecnologia': {'label': 'Tecnologia', 'descricao': 'TI, software, dados'},
+    'ti': {'label': 'TI', 'descricao': 'Tecnologia da informação'},
+    'software': {'label': 'Software', 'descricao': 'Desenvolvimento de software'},
+    'marketing': {'label': 'Marketing', 'descricao': 'Agências de marketing e publicidade'},
+    'transporte': {'label': 'Transporte', 'descricao': 'Transporte de passageiros e carga'},
+    'logistica': {'label': 'Logística', 'descricao': 'Logística e armazenagem'},
+    'industria': {'label': 'Indústria', 'descricao': 'Indústria de transformação'},
+    'automotivo': {'label': 'Automotivo', 'descricao': 'Concessionárias, oficinas, peças'},
+    'seguros': {'label': 'Seguros', 'descricao': 'Seguros, corretoras, previdência'},
+    'corretora': {'label': 'Corretora', 'descricao': 'Corretoras de seguros e títulos'},
+    'financeiro': {'label': 'Financeiro', 'descricao': 'Bancos, financeiras, investimentos'},
+    'hotel': {'label': 'Hotel', 'descricao': 'Hotéis e hospedagens'},
+    'turismo': {'label': 'Turismo', 'descricao': 'Agências de turismo'},
+    'eventos': {'label': 'Eventos', 'descricao': 'Eventos e entretenimento'},
+    'beleza': {'label': 'Beleza', 'descricao': 'Cosméticos e tratamentos estéticos'},
+}
+
+
+def _proxy_to_cnpj_service(endpoint: str, params: dict = None) -> Optional[dict]:
+    """Proxy request to CNPJ microservice if available."""
+    if not CNPJ_SERVICE_URL:
+        return None
+    try:
+        import httpx
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.get(f"{CNPJ_SERVICE_URL}{endpoint}", params=params)
+            if resp.status_code == 200:
+                return resp.json()
+    except Exception as e:
+        logger.warning(f"[CNPJ PROXY] Error calling {endpoint}: {e}")
+    return None
+
+
+@app.get("/api/cnpj/busca-endereco")
+async def busca_endereco(
+    cep: str = "",
+    logradouro: str = "",
+    bairro: str = "",
+    municipio: str = "",
+    uf: str = "",
+    cnae: str = "",
+    cnae_categoria: str = "",
+    porte: str = "",
+    situacao: str = "02",
+    limit: int = 20
+):
+    """Busca empresas por endereço. Proxy to CNPJ microservice."""
+    result = _proxy_to_cnpj_service("/api/cnpj/busca-endereco", {
+        "cep": cep, "logradouro": logradouro, "bairro": bairro,
+        "municipio": municipio, "uf": uf, "cnae": cnae,
+        "cnae_categoria": cnae_categoria, "porte": porte,
+        "situacao": situacao, "limit": limit
+    })
+    if result:
+        return result
+    return {"total": 0, "filtros": {}, "results": [], "error": "CNPJ microservice não configurado. Funciona apenas em modo local (Docker)."}
+
+
+@app.get("/api/cnpj/busca-socio")
+async def busca_socio(
+    nome: str = "",
+    uf: str = "",
+    municipio: str = "",
+    limit: int = 20
+):
+    """Busca empresas por sócio. Proxy to CNPJ microservice."""
+    if not nome or len(nome) < 3:
+        return {"total": 0, "results": [], "error": "Nome do sócio obrigatório (mín. 3 chars)"}
+    result = _proxy_to_cnpj_service("/api/cnpj/busca-socio", {
+        "nome": nome, "uf": uf, "municipio": municipio, "limit": limit
+    })
+    if result:
+        return result
+    return {"total": 0, "results": [], "error": "CNPJ microservice não configurado. Funciona apenas em modo local (Docker)."}
+
+
+@app.get("/api/cnpj/busca-avancada")
+async def busca_avancada(
+    uf: str = "",
+    municipio: str = "",
+    bairro: str = "",
+    cep: str = "",
+    cnae: str = "",
+    cnae_categoria: str = "",
+    porte: str = "",
+    capital_min: float = 0,
+    capital_max: float = 0,
+    idade_min: int = 0,
+    idade_max: int = 0,
+    apenas_matriz: bool = False,
+    tem_telefone: bool = False,
+    tem_simples: bool = False,
+    prospect_score_min: int = 0,
+    situacao: str = "02",
+    order_by: str = "score",
+    limit: int = 20
+):
+    """Busca avançada com filtros inteligentes. Proxy to CNPJ microservice."""
+    result = _proxy_to_cnpj_service("/api/cnpj/busca-avancada", {
+        "uf": uf, "municipio": municipio, "bairro": bairro, "cep": cep,
+        "cnae": cnae, "cnae_categoria": cnae_categoria, "porte": porte,
+        "capital_min": capital_min, "capital_max": capital_max,
+        "idade_min": idade_min, "idade_max": idade_max,
+        "apenas_matriz": apenas_matriz, "tem_telefone": tem_telefone,
+        "tem_simples": tem_simples, "prospect_score_min": prospect_score_min,
+        "situacao": situacao, "order_by": order_by, "limit": limit
+    })
+    if result:
+        return result
+    return {"total": 0, "filtros": {}, "results": [], "error": "CNPJ microservice não configurado. Funciona apenas em modo local (Docker)."}
+
+
+@app.get("/api/cnpj/cnae/categorias")
+async def listar_categorias_cnae():
+    """Lista categorias CNAE disponíveis (static, works everywhere)."""
+    return {"categorias": CNAE_CATEGORIAS}
+
+
+@app.post("/api/whatsapp/send")
+async def whatsapp_send(data: dict):
+    """WhatsApp send endpoint (placeholder — integrate with Evolution/Z-API)."""
+    phone = data.get("phone", "")
+    message = data.get("message", "")
+    if not phone or not message:
+        return {"error": "phone and message required"}
+    # TODO: integrate with WhatsApp API (Evolution, Z-API, or Business API)
+    logger.warning(f"[WHATSAPP] Would send to {phone}: {message[:50]}...")
+    return {"status": "sent", "phone": phone, "message": message[:100]}
+
+
 @app.post("/api/enrich")
 async def enrich_lead(data: dict):
     import logging
