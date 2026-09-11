@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { Search, MapPin, Building2, Phone, Mail, Star, Loader2, Filter, ChevronDown, Eye, Plus, Zap, Globe, ArrowDownUp, XCircle, FileText, Download, User } from 'lucide-react'
+import { useState, useCallback, useEffect } from 'react'
+import { Search, MapPin, Building2, Phone, Mail, Star, Loader2, Filter, ChevronDown, Eye, Plus, Zap, Globe, ArrowDownUp, XCircle, FileText, Download, User, Users, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import { supabase } from '@/hooks/useLeads'
 import { Lead } from '@/types/lead'
 
@@ -27,12 +27,23 @@ interface AddressResult {
   opcao_mei: boolean | null
   identificador_matriz_filial: string
   data_inicio_atividade: string
+  prospect_score?: number
+  socio_encontrado?: string
+  qualificacao_socio?: string
+  idade_anos?: number
 }
 
 interface SearchResult {
   total: number
   filtros: Record<string, string | null>
   results: AddressResult[]
+}
+
+interface CnaeCategoria {
+  key: string
+  label: string
+  descricao: string
+  count: number
 }
 
 const UFS = [
@@ -54,6 +65,13 @@ const SITUACAO_OPTIONS = [
   { value: '03', label: 'Suspensa' },
   { value: '04', label: 'Inapta' },
   { value: '08', label: 'Baixada' },
+]
+
+const ORDER_OPTIONS = [
+  { value: 'score', label: 'Prospecção (Score)' },
+  { value: 'capital', label: 'Capital Social' },
+  { value: 'cidade', label: 'Cidade' },
+  { value: 'cnae', label: 'CNAE' },
 ]
 
 function fmtCNPJ(v: string) {
@@ -89,6 +107,18 @@ function situacaoLabel(v: string) {
   return map[v] || v || '—'
 }
 
+function scoreColor(score: number) {
+  if (score >= 70) return 'text-emerald-400 bg-emerald-500/15 border-emerald-500/25'
+  if (score >= 50) return 'text-amber-400 bg-amber-500/15 border-amber-500/25'
+  return 'text-slate-400 bg-slate-500/15 border-slate-500/25'
+}
+
+function scoreBarColor(score: number) {
+  if (score >= 70) return 'bg-emerald-400'
+  if (score >= 50) return 'bg-amber-400'
+  return 'bg-slate-500'
+}
+
 interface Props {
   onAddToBase: (lead: Lead) => void
   showToast: (msg: string, type?: string) => void
@@ -96,17 +126,39 @@ interface Props {
 }
 
 export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: Props) {
+  // ── Search mode ──
+  const [searchMode, setSearchMode] = useState<'endereco' | 'socio' | 'avancada'>('avancada')
+
+  // ── Endereço filters ──
   const [cep, setCep] = useState('')
   const [logradouro, setLogradouro] = useState('')
   const [bairro, setBairro] = useState('')
   const [municipio, setMunicipio] = useState('')
   const [uf, setUf] = useState('')
+
+  // ── Negócio filters ──
   const [cnae, setCnae] = useState('')
+  const [cnaeCategoria, setCnaeCategoria] = useState('')
   const [porte, setPorte] = useState('')
   const [situacao, setSituacao] = useState('02')
-  const [limit, setLimit] = useState(20)
-  const [showFilters, setShowFilters] = useState(true)
 
+  // ── Advanced filters ──
+  const [capitalMin, setCapitalMin] = useState('')
+  const [capitalMax, setCapitalMax] = useState('')
+  const [idadeMin, setIdadeMin] = useState('')
+  const [idadeMax, setIdadeMax] = useState('')
+  const [apenasMatriz, setApenasMatriz] = useState(false)
+  const [temTelefone, setTemTelefone] = useState(false)
+  const [temSimples, setTemSimples] = useState(false)
+  const [prospectScoreMin, setProspectScoreMin] = useState(0)
+  const [orderBy, setOrderBy] = useState('score')
+  const [limit, setLimit] = useState(20)
+
+  // ── Sócio filter ──
+  const [socioNome, setSocioNome] = useState('')
+
+  // ── UI state ──
+  const [showFilters, setShowFilters] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [results, setResults] = useState<AddressResult[]>([])
@@ -115,16 +167,66 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [viewDetail, setViewDetail] = useState<AddressResult | null>(null)
 
+  // ── CNAE categorias from API ──
+  const [cnaeCategorias, setCnaeCategorias] = useState<CnaeCategoria[]>([])
+  const [loadingCategorias, setLoadingCategorias] = useState(false)
+
+  useEffect(() => {
+    setLoadingCategorias(true)
+    fetch(`${API_BASE}/api/cnpj/cnae/categorias`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.categorias) {
+          const list = Object.entries(data.categorias).map(([key, val]: [string, any]) => ({
+            key, label: val.label, descricao: val.descricao, count: val.count
+          }))
+          setCnaeCategorias(list)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingCategorias(false))
+  }, [])
+
   const handleSearch = useCallback(async () => {
-    if (!cep && !logradouro && !bairro && !municipio && !uf) {
-      setError('Informe pelo menos um filtro de endereço')
+    // ── Socio search mode ──
+    if (searchMode === 'socio') {
+      if (!socioNome || socioNome.length < 3) {
+        setError('Informe o nome do sócio (mínimo 3 caracteres)')
+        return
+      }
+      setLoading(true); setError(''); setSearched(true); setSelected(new Set())
+      try {
+        const params = new URLSearchParams({ nome: socioNome, limit: String(limit) })
+        if (uf) params.set('uf', uf)
+        if (municipio) params.set('municipio', municipio)
+        const resp = await fetch(`${API_BASE}/api/cnpj/busca-socio?${params}`)
+        if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.detail || `Erro ${resp.status}`) }
+        const data = await resp.json()
+        const mapped = data.results.map((r: any) => ({
+          cnpj: r.cnpj, razao_social: r.razao_social, nome_fantasia: r.nome_fantasia,
+          endereco: r.logradouro || '', bairro: r.bairro || '', cep: r.cep || '',
+          uf: r.uf || '', municipio: r.municipio || '', telefone_1: r.telefone || '',
+          telefone_2: '', email: '', cnae_fiscal: '', cnae_fiscal_descricao: r.atividade || '',
+          situacao_cadastral: '02', porte: r.porte || '', capital_social: r.capital_social,
+          natureza_juridica: '', opcao_simples: null, opcao_mei: null,
+          identificador_matriz_filial: '', data_inicio_atividade: '',
+          socio_encontrado: r.socio_encontrado, qualificacao_socio: r.qualificacao_socio,
+        }))
+        setResults(mapped)
+        setTotal(data.total)
+        showToast(data.total > 0 ? `${data.total} empresa(s) do sócio "${socioNome}"` : 'Nenhuma empresa encontrada para este sócio', data.total > 0 ? 'success' : 'info')
+      } catch (err: any) { setError(err.message); setResults([]); setTotal(0) }
+      finally { setLoading(false) }
       return
     }
 
-    setLoading(true)
-    setError('')
-    setSearched(true)
-    setSelected(new Set())
+    // ── Endereco or avancada mode ──
+    if (!cep && !logradouro && !bairro && !municipio && !uf && !cnaeCategoria && !cnae) {
+      setError('Informe pelo menos um filtro de localização ou CNAE')
+      return
+    }
+
+    setLoading(true); setError(''); setSearched(true); setSelected(new Set())
 
     try {
       const params = new URLSearchParams()
@@ -134,11 +236,22 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
       if (municipio) params.set('municipio', municipio)
       if (uf) params.set('uf', uf)
       if (cnae) params.set('cnae', cnae)
+      if (cnaeCategoria) params.set('cnae_categoria', cnaeCategoria)
       if (porte) params.set('porte', porte)
       if (situacao) params.set('situacao', situacao)
+      if (capitalMin) params.set('capital_min', capitalMin)
+      if (capitalMax) params.set('capital_max', capitalMax)
+      if (idadeMin) params.set('idade_min', idadeMin)
+      if (idadeMax) params.set('idade_max', idadeMax)
+      if (apenasMatriz) params.set('apenas_matriz', 'true')
+      if (temTelefone) params.set('tem_telefone', 'true')
+      if (temSimples) params.set('tem_simples', 'true')
+      if (prospectScoreMin > 0) params.set('prospect_score_min', String(prospectScoreMin))
+      if (orderBy !== 'score') params.set('order_by', orderBy)
       params.set('limit', String(limit))
 
-      const resp = await fetch(`${API_BASE}/api/cnpj/busca-endereco?${params}`)
+      const endpoint = searchMode === 'endereco' ? '/api/cnpj/busca-endereco' : '/api/cnpj/busca-avancada'
+      const resp = await fetch(`${API_BASE}${endpoint}?${params}`)
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}))
         throw new Error(errData.detail || `Erro ${resp.status}`)
@@ -159,7 +272,7 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
     } finally {
       setLoading(false)
     }
-  }, [cep, logradouro, bairro, municipio, uf, cnae, porte, situacao, limit, showToast])
+  }, [cep, logradouro, bairro, municipio, uf, cnae, cnaeCategoria, porte, situacao, capitalMin, capitalMax, idadeMin, idadeMax, apenasMatriz, temTelefone, temSimples, prospectScoreMin, orderBy, limit, searchMode, socioNome, showToast])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch()
@@ -194,7 +307,7 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
         city: r.municipio || '',
         plan: 'Empresarial',
         status: 'new',
-        score: 70,
+        score: r.prospect_score || 70,
         source: 'Google Maps',
         created_at: new Date().toISOString(),
         cnpj: r.cnpj,
@@ -230,106 +343,289 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
     setSelected(new Set())
   }
 
+  const handleClearFilters = () => {
+    setCep(''); setLogradouro(''); setBairro(''); setMunicipio(''); setUf('')
+    setCnae(''); setCnaeCategoria(''); setPorte(''); setSituacao('02')
+    setCapitalMin(''); setCapitalMax(''); setIdadeMin(''); setIdadeMax('')
+    setApenasMatriz(false); setTemTelefone(false); setTemSimples(false)
+    setProspectScoreMin(0); setOrderBy('score'); setLimit(20)
+    setSocioNome(''); setResults([]); setTotal(0); setSearched(false); setSelected(new Set())
+    setError('')
+  }
+
+  // Count active filters
+  const activeFilterCount = [
+    cnaeCategoria, cnae, porte, capitalMin, capitalMax, idadeMin, idadeMax,
+    apenasMatriz ? 'matriz' : '', temTelefone ? 'tel' : '', temSimples ? 'simples' : '',
+    prospectScoreMin > 0 ? 'score' : ''
+  ].filter(Boolean).length
+
   return (
     <div className="space-y-4">
-      {/* Search Panel */}
+      {/* ── Search Panel ── */}
       <div className="glass p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <MapPin size={18} className="text-cyan-400" />
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Busca por Endereço</h3>
-          <button onClick={() => setShowFilters(!showFilters)} className="ml-auto btn-ghost text-xs px-2 py-1">
-            <Filter size={12} className="inline mr-1" />
-            {showFilters ? 'Ocultar filtros' : 'Mais filtros'}
-          </button>
-        </div>
+        {/* Header + Mode Selector */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={18} className="text-cyan-400" />
+            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Busca Inteligente</h3>
+          </div>
 
-        {/* Primary filters — always visible */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-          <div>
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">CEP</label>
-            <input
-              type="text" value={cep} onChange={e => setCep(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="01310-100" maxLength={9}
-              className="input-field"
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Rua / Avenida</label>
-            <input
-              type="text" value={logradouro} onChange={e => setLogradouro(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Av. Paulista, Rua Augusta..."
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">UF</label>
-            <select value={uf} onChange={e => setUf(e.target.value)} className="input-field">
-              {UFS.map(u => <option key={u} value={u}>{u || 'Todos'}</option>)}
-            </select>
+          {/* Mode Tabs */}
+          <div className="flex items-center gap-1 bg-slate-800/60 rounded-xl p-1 sm:ml-auto">
+            {[
+              { key: 'avancada' as const, icon: SlidersHorizontal, label: 'Avançada' },
+              { key: 'endereco' as const, icon: MapPin, label: 'Endereço' },
+              { key: 'socio' as const, icon: Users, label: 'Sócio' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setSearchMode(tab.key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  searchMode === tab.key
+                    ? 'bg-cyan-500/20 text-cyan-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                <tab.icon size={12} />
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Município</label>
-            <input
-              type="text" value={municipio} onChange={e => setMunicipio(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="São Paulo, Rio de Janeiro..."
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Bairro</label>
-            <input
-              type="text" value={bairro} onChange={e => setBairro(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Bela Vista, Copacabana..."
-              className="input-field"
-            />
-          </div>
-        </div>
-
-        {/* Advanced filters — collapsible */}
-        {showFilters && (
-          <div className="border-t border-slate-700/50 pt-3 mt-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">CNAE (Atividade)</label>
+        {/* ── Sócio Mode ── */}
+        {searchMode === 'socio' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <User size={11} /> Nome do Sócio
+                </label>
                 <input
-                  type="text" value={cnae} onChange={e => setCnae(e.target.value)} onKeyDown={handleKeyDown}
-                  placeholder="Ex: 6621-5/00"
+                  type="text" value={socioNome} onChange={e => setSocioNome(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="Nome completo ou parcial (mín. 3 chars)"
                   className="input-field"
+                  autoFocus
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Porte</label>
-                <select value={porte} onChange={e => setPorte(e.target.value)} className="input-field">
-                  {PORTE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">UF (opcional)</label>
+                <select value={uf} onChange={e => setUf(e.target.value)} className="input-field">
+                  {UFS.map(u => <option key={u} value={u}>{u || 'Todos'}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Situação</label>
-                <select value={situacao} onChange={e => setSituacao(e.target.value)} className="input-field">
-                  {SITUACAO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Limite</label>
-                <input
-                  type="number" value={limit} onChange={e => setLimit(parseInt(e.target.value) || 20)}
-                  min={1} max={100} className="input-field"
-                />
-              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Município (opcional)</label>
+              <input
+                type="text" value={municipio} onChange={e => setMunicipio(e.target.value)} onKeyDown={handleKeyDown}
+                placeholder="Filtrar por cidade..."
+                className="input-field max-w-md"
+              />
             </div>
           </div>
         )}
 
-        <div className="flex gap-3 mt-3">
+        {/* ── Endereço / Avançada Mode ── */}
+        {searchMode !== 'socio' && (
+          <>
+            {/* Primary filters — always visible */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">CEP</label>
+                <input
+                  type="text" value={cep} onChange={e => setCep(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="01310-100" maxLength={9}
+                  className="input-field"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Rua / Avenida</label>
+                <input
+                  type="text" value={logradouro} onChange={e => setLogradouro(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="Av. Paulista, Rua Augusta..."
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">UF</label>
+                <select value={uf} onChange={e => setUf(e.target.value)} className="input-field">
+                  {UFS.map(u => <option key={u} value={u}>{u || 'Todos'}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Município</label>
+                <input
+                  type="text" value={municipio} onChange={e => setMunicipio(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="São Paulo, Rio de Janeiro..."
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Bairro</label>
+                <input
+                  type="text" value={bairro} onChange={e => setBairro(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="Bela Vista, Copacabana..."
+                  className="input-field"
+                />
+              </div>
+            </div>
+
+            {/* Advanced filters — collapsible */}
+            <div className="border-t border-slate-700/50 pt-3 mt-3">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-cyan-400 transition-colors mb-3"
+              >
+                <Filter size={12} />
+                {showFilters ? 'Ocultar filtros avançados' : 'Mostrar filtros avançados'}
+                {activeFilterCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 text-[10px] font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+                <ChevronDown size={12} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showFilters && (
+                <div className="space-y-3 animate-in fade-in-0 duration-200">
+                  {/* Row 1: CNAE + Categoria + Porte + Situação */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">CNAE (código)</label>
+                      <input
+                        type="text" value={cnae} onChange={e => setCnae(e.target.value)} onKeyDown={handleKeyDown}
+                        placeholder="Ex: 6621-5/00"
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">
+                        Categoria CNAE
+                        {loadingCategorias && <Loader2 size={10} className="inline ml-1 animate-spin text-slate-600" />}
+                      </label>
+                      <select value={cnaeCategoria} onChange={e => { setCnaeCategoria(e.target.value); if (e.target.value) setCnae('') }} className="input-field">
+                        <option value="">Todas</option>
+                        {cnaeCategorias.map(cat => (
+                          <option key={cat.key} value={cat.key}>{cat.label} — {cat.descricao}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Porte</label>
+                      <select value={porte} onChange={e => setPorte(e.target.value)} className="input-field">
+                        {PORTE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Situação</label>
+                      <select value={situacao} onChange={e => setSituacao(e.target.value)} className="input-field">
+                        {SITUACAO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Row 2: Capital + Idade */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">💰 Capital Mín (R$)</label>
+                      <input
+                        type="number" value={capitalMin} onChange={e => setCapitalMin(e.target.value)} onKeyDown={handleKeyDown}
+                        placeholder="0" min={0}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">💰 Capital Máx (R$)</label>
+                      <input
+                        type="number" value={capitalMax} onChange={e => setCapitalMax(e.target.value)} onKeyDown={handleKeyDown}
+                        placeholder="Sem limite" min={0}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">📅 Idade Mín (anos)</label>
+                      <input
+                        type="number" value={idadeMin} onChange={e => setIdadeMin(e.target.value)} onKeyDown={handleKeyDown}
+                        placeholder="0" min={0} max={100}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">📅 Idade Máx (anos)</label>
+                      <input
+                        type="number" value={idadeMax} onChange={e => setIdadeMax(e.target.value)} onKeyDown={handleKeyDown}
+                        placeholder="Sem limite" min={0} max={100}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Checkboxes + Score + Ordenar + Limite */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={apenasMatriz} onChange={e => setApenasMatriz(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500/30" />
+                        <span className="text-xs text-slate-400 group-hover:text-slate-300">Apenas Matriz</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={temTelefone} onChange={e => setTemTelefone(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500/30" />
+                        <span className="text-xs text-slate-400 group-hover:text-slate-300">Tem Telefone</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={temSimples} onChange={e => setTemSimples(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500/30" />
+                        <span className="text-xs text-slate-400 group-hover:text-slate-300">Simples Nacional</span>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <TrendingUp size={11} /> Score Mín: {prospectScoreMin}
+                      </label>
+                      <input
+                        type="range" min={0} max={100} step={5}
+                        value={prospectScoreMin}
+                        onChange={e => setProspectScoreMin(parseInt(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
+                        <span>0</span><span>50</span><span>100</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Ordenar por</label>
+                      <select value={orderBy} onChange={e => setOrderBy(e.target.value)} className="input-field">
+                        {ORDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5 block">Limite</label>
+                      <input
+                        type="number" value={limit} onChange={e => setLimit(parseInt(e.target.value) || 20)}
+                        min={1} max={100} className="input-field"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Action buttons ── */}
+        <div className="flex gap-3 mt-4">
           <button onClick={handleSearch} disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-2">
             {loading ? <><Loader2 size={16} className="animate-spin" /> Buscando...</> : <><Search size={16} /> Buscar Empresas</>}
           </button>
-          {results.length > 0 && (
-            <button onClick={() => { setResults([]); setTotal(0); setSearched(false); setSelected(new Set()) }} className="btn-ghost">
-              Limpar
+          {(searched || Object.values({ cep, logradouro, bairro, municipio, cnae, cnaeCategoria, socioNome }).some(Boolean)) && (
+            <button onClick={handleClearFilters} className="btn-ghost flex items-center gap-1.5">
+              <XCircle size={14} /> Limpar
             </button>
           )}
         </div>
@@ -341,7 +637,7 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
         )}
       </div>
 
-      {/* Selection bar */}
+      {/* ── Selection bar ── */}
       {selected.size > 0 && (
         <div className="glass-sm p-3 border-cyan-500/20 flex flex-col sm:flex-row items-start sm:items-center gap-3 animate-scale-in">
           <span className="text-sm text-cyan-400 font-medium">{selected.size} selecionada(s)</span>
@@ -356,7 +652,7 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
         </div>
       )}
 
-      {/* Results */}
+      {/* ── Results ── */}
       {searched && !loading && (
         <div className="glass overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
@@ -390,6 +686,8 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
                     <th>Endereço</th>
                     <th>Telefone</th>
                     <th>Atividade</th>
+                    {searchMode === 'avancada' && <th className="text-center">Score</th>}
+                    {searchMode === 'socio' && <th>Sócio</th>}
                     <th className="text-center">Ações</th>
                   </tr>
                 </thead>
@@ -424,6 +722,12 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
                                 {r.opcao_simples && (
                                   <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[9px] font-bold">S.N.</span>
                                 )}
+                                {r.identificador_matriz_filial === '1' && (
+                                  <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 text-[9px] font-bold">MATRIZ</span>
+                                )}
+                                {r.identificador_matriz_filial === '2' && (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-400 text-[9px] font-bold">FILIAL</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -451,6 +755,30 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
                           <p className="text-xs text-slate-300 truncate max-w-[180px]">{r.cnae_fiscal_descricao || '—'}</p>
                           {r.cnae_fiscal && <p className="text-[10px] text-slate-500">{r.cnae_fiscal}</p>}
                         </td>
+                        {searchMode === 'avancada' && (
+                          <td className="text-center">
+                            {r.prospect_score !== undefined ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${scoreColor(r.prospect_score)}`}>
+                                  {r.prospect_score}
+                                </span>
+                                <div className="w-12 h-1 bg-slate-700 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${scoreBarColor(r.prospect_score)}`} style={{ width: `${r.prospect_score}%` }} />
+                                </div>
+                              </div>
+                            ) : '—'}
+                          </td>
+                        )}
+                        {searchMode === 'socio' && (
+                          <td>
+                            {r.socio_encontrado ? (
+                              <div className="text-xs">
+                                <p className="text-slate-300 truncate max-w-[150px]">{r.socio_encontrado}</p>
+                                {r.qualificacao_socio && <p className="text-[10px] text-slate-500">Cod. {r.qualificacao_socio}</p>}
+                              </div>
+                            ) : '—'}
+                          </td>
+                        )}
                         <td>
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => setViewDetail(r)} className="p-1.5 rounded-lg hover:bg-cyan-500/10 text-slate-500 hover:text-cyan-400 transition-all" title="Ver detalhes">
@@ -467,7 +795,7 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
                                   city: r.municipio || '',
                                   plan: 'Empresarial',
                                   status: 'new',
-                                  score: 70,
+                                  score: r.prospect_score || 70,
                                   source: 'Google Maps',
                                   created_at: new Date().toISOString(),
                                   cnpj: r.cnpj,
@@ -503,7 +831,7 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* ── Detail Modal ── */}
       {viewDetail && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-8 pb-4 sm:pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={() => setViewDetail(null)}>
           <div className="relative w-full max-w-3xl mx-2 sm:mx-4 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -511,8 +839,28 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
               <XCircle size={18} />
             </button>
             <div className="p-5">
-              <h2 className="text-lg font-bold text-cyan-400 mb-1 pr-8">{viewDetail.nome_fantasia || viewDetail.razao_social || 'Empresa'}</h2>
-              <p className="text-xs text-slate-500 mb-4">{fmtCNPJ(viewDetail.cnpj)}</p>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center text-lg font-bold text-cyan-400 shrink-0">
+                  {(viewDetail.nome_fantasia || viewDetail.razao_social || '?')[0]?.toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold text-cyan-400 pr-8">{viewDetail.nome_fantasia || viewDetail.razao_social || 'Empresa'}</h2>
+                  <p className="text-xs text-slate-500 font-mono">{fmtCNPJ(viewDetail.cnpj)}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {viewDetail.prospect_score !== undefined && (
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${scoreColor(viewDetail.prospect_score)}`}>
+                        Score: {viewDetail.prospect_score}
+                      </span>
+                    )}
+                    {viewDetail.identificador_matriz_filial === '1' && (
+                      <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 text-[10px] font-bold">MATRIZ</span>
+                    )}
+                    {viewDetail.identificador_matriz_filial === '2' && (
+                      <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-400 text-[10px] font-bold">FILIAL</span>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 <Field emoji="📋" label="Razão Social" value={viewDetail.razao_social} />
@@ -527,6 +875,9 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
                 <Field emoji="🏷️" label="Tipo" value={viewDetail.identificador_matriz_filial === '1' ? 'Matriz' : viewDetail.identificador_matriz_filial === '2' ? 'Filial' : viewDetail.identificador_matriz_filial} />
                 <Field emoji="✅" label="Simples Nacional" value={viewDetail.opcao_simples === true ? 'Sim' : viewDetail.opcao_simples === false ? 'Não' : null} />
                 <Field emoji="🏠" label="MEI" value={viewDetail.opcao_mei === true ? 'Sim' : viewDetail.opcao_mei === false ? 'Não' : null} />
+                {viewDetail.idade_anos !== undefined && viewDetail.idade_anos > 0 && (
+                  <Field emoji="⏳" label="Idade" value={`${viewDetail.idade_anos} anos`} />
+                )}
               </div>
 
               <div className="border-t border-slate-700 my-4" />
@@ -555,12 +906,26 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
                 <Field emoji="✉️" label="Email" value={viewDetail.email} />
               </div>
 
+              {viewDetail.socio_encontrado && (
+                <>
+                  <div className="border-t border-slate-700 my-4" />
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users size={14} className="text-cyan-400" />
+                    <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider">Sócio</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                    <Field emoji="👤" label="Nome" value={viewDetail.socio_encontrado} />
+                    <Field emoji="🏷️" label="Qualificação" value={viewDetail.qualificacao_socio} />
+                  </div>
+                </>
+              )}
+
               <div className="border-t border-slate-700 mt-4 pt-4 flex gap-2">
                 <button onClick={() => {
                   const lead: Lead = {
                     id: crypto.randomUUID(), name: viewDetail.nome_fantasia || viewDetail.razao_social || 'Empresa',
                     email: viewDetail.email || 'N/A', phone: viewDetail.telefone_1 || '', city: viewDetail.municipio || '',
-                    plan: 'Empresarial', status: 'new', score: 70, source: 'Google Maps', created_at: new Date().toISOString(),
+                    plan: 'Empresarial', status: 'new', score: viewDetail.prospect_score || 70, source: 'Google Maps', created_at: new Date().toISOString(),
                     cnpj: viewDetail.cnpj,
                     enriched_data: {
                       CNPJ: viewDetail.cnpj, RazaoSocial: viewDetail.razao_social, NomeFantasia: viewDetail.nome_fantasia,
