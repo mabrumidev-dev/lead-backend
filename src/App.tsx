@@ -148,7 +148,11 @@ function App() {
 
   const showToast = (message: string, type: any = 'info') => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => {
+      const next = [...prev, { id, message, type }];
+      // Keep max 3 toasts visible
+      return next.length > 3 ? next.slice(-3) : next;
+    });
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
 
