@@ -27,7 +27,14 @@ logger.warning("[MAIN] FastAPI starting up...")
 sys.path.insert(0, os.path.dirname(__file__))
 from scraper_engine import ScraperEngine, lookup_cnpj, search_social_media, check_health_plan, check_employee_count
 
-app = FastAPI(title="Mabrumi Scraper API", version="1.0.0")
+app = FastAPI(
+    title="Mabrumi Scraper API",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    description="Mabrumi CRM Pro - Backend API for lead scraping, enrichment, and CNPJ lookup",
+)
 
 ALLOWED_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
 
@@ -186,8 +193,39 @@ async def analyze_vision(file: UploadFile = File(...)):
 # CNPJ microservice URL (local PostgreSQL + trigram)
 CNPJ_SERVICE_URL = os.environ.get('CNPJ_SERVICE_URL', '') or 'http://localhost:8003'
 
-# In-memory cache for CNPJ lookups (avoids re-querying same business)
-_cnpj_cache: dict[str, dict] = {}
+# In-memory cache for CNPJ lookups with TTL + max size (LRU)
+from collections import OrderedDict
+from time import monotonic
+
+CACHE_TTL = 3600  # 1 hour
+CACHE_MAX = 1000  # max entries
+
+
+class TTLCache:
+    """Simple TTL + LRU cache for CNPJ lookups."""
+    def __init__(self, maxsize: int = CACHE_TTL, ttl: int = CACHE_TTL):
+        self._store: OrderedDict[str, tuple[dict, float]] = OrderedDict()
+        self._maxsize = maxsize
+        self._ttl = ttl
+
+    def get(self, key: str) -> Optional[dict]:
+        if key in self._store:
+            val, ts = self._store[key]
+            if monotonic() - ts < self._ttl:
+                self._store.move_to_end(key)
+                return val
+            else:
+                del self._store[key]  # expired
+        return None
+
+    def set(self, key: str, val: dict):
+        if len(self._store) >= self._maxsize:
+            self._store.popitem(last=False)  # evict oldest
+        self._store[key] = (val, monotonic())
+
+
+_cnpj_cache = TTLCache(maxsize=CACHE_MAX, ttl=CACHE_TTL)
+
 
 
 def _try_cnpj_service(website: str, business_name: str, city: str, phone: str) -> Optional[dict]:
@@ -376,9 +414,9 @@ async def enrich_lead(data: dict):
     # Cache check: use phone digits as key (most reliable identifier)
     phone_digits = re.sub(r'\D', '', phone) if phone else ""
     cache_key = phone_digits or business_name.lower().strip()
-    if cache_key and cache_key in _cnpj_cache:
+    if cache_key and _cnpj_cache.get(cache_key):
         log.warning(f"[ENRICH] Cache HIT for '{cache_key}'")
-        return _cnpj_cache[cache_key]
+        return _cnpj_cache.get(cache_key)
 
     # Priority 1: Try CNPJ microservice (local DB, instant)
     if CNPJ_SERVICE_URL:
@@ -392,7 +430,7 @@ async def enrich_lead(data: dict):
             if cnpj_result:
                 log.warning(f"[ENRICH] CNPJ service found: {cnpj_result.get('cnpj', '')}")
                 if cache_key:
-                    _cnpj_cache[cache_key] = cnpj_result
+                    _cnpj_cache.set(cache_key, cnpj_result)
                 return cnpj_result
         except asyncio.TimeoutError:
             log.warning("[ENRICH] CNPJ service timeout, falling back...")
@@ -409,7 +447,7 @@ async def enrich_lead(data: dict):
         if result:
             # Cache the result
             if cache_key:
-                _cnpj_cache[cache_key] = result
+                _cnpj_cache.set(cache_key, result)
             return result
     except asyncio.TimeoutError:
         log.error(f"[ENRICH] TIMEOUT after 30s for name={business_name}")
@@ -465,7 +503,7 @@ async def enrich_lead(data: dict):
                 "motivo_situacao": fallback_result.get("motivo_situacao", ""),
             }
             if cache_key:
-                _cnpj_cache[cache_key] = result
+                _cnpj_cache.set(cache_key, result)
             return result
     except Exception as e:
         log.error(f"[ENRICH] Fallback error: {type(e).__name__}: {e}")
@@ -504,10 +542,19 @@ async def cancel_scrape(job_id: str):
 DIST_DIR = os.path.join(os.path.dirname(__file__), "..", "dist")
 if os.path.isdir(DIST_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(DIST_DIR, "assets")), name="assets")
+
+    # Paths that should NOT be handled by SPA (let FastAPI handle them)
+    SPA_EXCLUDE = {"/docs", "/redoc", "/openapi.json", "/favicon.ico"}
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        # Skip SPA for API docs and openapi
+        if f"/{full_path}" in SPA_EXCLUDE:
+            from fastapi.responses import Response
+            return Response(status_code=404)
         file_path = os.path.join(DIST_DIR, full_path)
-        if os.path.isfile(file_path): return FileResponse(file_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
         html_path = os.path.join(DIST_DIR, "index.html")
         with open(html_path, "r") as f:
             html = f.read()

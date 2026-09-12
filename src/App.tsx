@@ -127,7 +127,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: any[]; onRemove: (id: nu
   return (
     <div className="fixed top-4 right-4 z-50 space-y-2">
       {toasts.map(t => (
-        <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg backdrop-blur-xl text-sm font-medium ${t.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-slate-800 text-white border border-slate-700'}`}>
+        <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg backdrop-blur-xl text-sm font-medium ${t.type === 'success' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : t.type === 'error' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-white border border-slate-700'}`}>
           {t.message}
           <button onClick={() => onRemove(t.id)} className="ml-2">×</button>
         </div>
@@ -229,7 +229,7 @@ function App() {
 
   const getTabContent = () => {
     if (activeTab === 'dashboard') {
-      return <DashboardBI leads={leads} baseLeads={baseLeads} showToast={showToast} />
+      return <DashboardBI leads={leads} baseLeads={baseLeads} showToast={showToast} onNavigate={(tab) => setActiveTab(tab as any)} />
     }
     if (activeTab === 'address') {
       return (

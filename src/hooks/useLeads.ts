@@ -71,6 +71,11 @@ export const useLeads = (customFilters?: FilterOptions) => {
     fetchLeads()
   }, [fetchLeads])
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    leadsRef.current = leads
+  }, [leads])
+
   return {
     leads,
     loading,

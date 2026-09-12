@@ -10,6 +10,7 @@ interface Props {
   leads: Lead[]
   baseLeads: any[]
   showToast: (msg: string, type?: string) => void
+  onNavigate?: (tab: string) => void
 }
 
 // ── KPI Card ──
@@ -72,7 +73,7 @@ function ActivityItem({ icon: Icon, iconColor, text, time }: {
   )
 }
 
-export default function DashboardBI({ leads, baseLeads, showToast }: Props) {
+export default function DashboardBI({ leads, baseLeads, showToast, onNavigate }: Props) {
   const [animateIn, setAnimateIn] = useState(false)
   useEffect(() => { setAnimateIn(true) }, [])
 
@@ -386,12 +387,12 @@ export default function DashboardBI({ leads, baseLeads, showToast }: Props) {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Buscar por CEP', desc: 'Encontre empresas por endereço', color: '#06b6d4' },
-            { label: 'Google Maps', desc: 'Scrape leads do Maps', color: '#10b981' },
-            { label: 'Importar CSV', desc: 'Importe sua lista', color: '#3b82f6' },
-            { label: 'Enviar WhatsApp', desc: 'Disparo em massa', color: '#f59e0b' },
+            { label: 'Buscar por CEP', desc: 'Encontre empresas por endereço', color: '#06b6d4', tab: 'address' },
+            { label: 'Google Maps', desc: 'Scrape leads do Maps', color: '#10b981', tab: 'scraper' },
+            { label: 'Importar CSV', desc: 'Importe sua lista', color: '#3b82f6', tab: 'importar' },
+            { label: 'Enviar WhatsApp', desc: 'Disparo em massa', color: '#f59e0b', tab: 'disparo' },
           ].map(action => (
-            <div key={action.label} className="p-3 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 bg-slate-900/30 cursor-pointer transition-all group">
+            <div key={action.label} onClick={() => onNavigate?.(action.tab)} className="p-3 rounded-xl border border-slate-700/50 hover:border-cyan-500/30 bg-slate-900/30 cursor-pointer transition-all group">
               <p className="text-sm text-white font-medium mb-0.5 group-hover:text-cyan-400 transition-colors">{action.label}</p>
               <p className="text-[10px] text-slate-500">{action.desc}</p>
             </div>
