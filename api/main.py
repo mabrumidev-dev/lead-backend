@@ -6,8 +6,9 @@ import threading
 import asyncio
 import re
 import logging
+import time
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
@@ -27,12 +28,23 @@ logger.warning("[MAIN] FastAPI starting up...")
 sys.path.insert(0, os.path.dirname(__file__))
 from scraper_engine import ScraperEngine, lookup_cnpj, search_social_media, check_health_plan, check_employee_count
 
+# ── OpenAPI Tags ──
+TAGS_METADATA = [
+    {"name": "Health", "description": "Health check e status do servidor"},
+    {"name": "Scraper", "description": "Google Maps scraping com SSE streaming"},
+    {"name": "Enrichment", "description": "Enriquecimento de leads: CNPJ, redes sociais, plano de saude, colaboradores"},
+    {"name": "CNPJ", "description": "Busca de empresas via CNPJ microservice (endereco, socio, filtros avancados)"},
+    {"name": "WhatsApp", "description": "Envio de mensagens WhatsApp (placeholder)"},
+    {"name": "Vision", "description": "Extracao de dados de imagens via IA"},
+]
+
 app = FastAPI(
-    title="Mabrumi Scraper API",
+    title="Mabrumi CRM Pro - API",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    openapi_tags=TAGS_METADATA,
     description="Mabrumi CRM Pro - Backend API for lead scraping, enrichment, and CNPJ lookup",
 )
 
@@ -46,19 +58,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── In-memory job store ──
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
+
+# ── TTL Cache for CNPJ lookups (thread-safe, LRU eviction) ──
+class TTLCache:
+    def __init__(self, maxsize: int = 500, ttl: int = 3600):
+        self._cache: dict[str, tuple[dict, float]] = {}
+        self._maxsize = maxsize
+        self._ttl = ttl
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> Optional[dict]:
+        with self._lock:
+            if key in self._cache:
+                value, ts = self._cache[key]
+                if time.time() - ts < self._ttl:
+                    return value
+                else:
+                    del self._cache[key]
+        return None
+
+    def set(self, key: str, value: dict):
+        with self._lock:
+            if len(self._cache) >= self._maxsize:
+                oldest_key = min(self._cache, key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+            self._cache[key] = (value, time.time())
+
+_cnpj_cache = TTLCache(maxsize=500, ttl=3600)  # 1h TTL, 500 entries max
+
 
 class ScrapeRequest(BaseModel):
     query: str
     limit: int = 0
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["Health"])
 async def health():
-    return {"status": "ok"}
+    """Health check do servidor."""
+    return {"status": "ok", "version": "1.0.0"}
 
-@app.post("/api/scrape")
+@app.post("/api/scrape", tags=["Scraper"])
 async def start_scrape(req: ScrapeRequest):
+    """Inicia um job de scraping do Google Maps. Retorna job_id para acompanhar via SSE em /api/scrape/{job_id}/stream."""
     job_id = str(uuid.uuid4())[:8]
     with jobs_lock:
         jobs[job_id] = {"status": "starting", "messages": [], "screenshots": [], "results": [], "progress": 0}
@@ -108,8 +151,9 @@ async def start_scrape(req: ScrapeRequest):
         jobs[job_id]["thread"] = thread
     return {"job_id": job_id, "status": "started"}
 
-@app.get("/api/scrape/{job_id}/stream")
+@app.get("/api/scrape/{job_id}/stream", tags=["Scraper"])
 async def stream_scrape(job_id: str):
+    """SSE stream de progresso do scraping. Conecta via EventSource no frontend."""
     from sse_starlette.sse import EventSourceResponse
     async def event_generator():
         import logging
@@ -143,8 +187,9 @@ async def stream_scrape(job_id: str):
             await asyncio.sleep(0.5)
     return EventSourceResponse(event_generator())
 
-@app.post("/api/vision/analyze")
+@app.post("/api/vision/analyze", tags=["Vision"])
 async def analyze_vision(file: UploadFile = File(...)):
+    """Extrai dados de contato de uma imagem usando IA (Mimo v2.5 Pro)."""
     import httpx
     import base64
     import json
@@ -193,39 +238,8 @@ async def analyze_vision(file: UploadFile = File(...)):
 # CNPJ microservice URL (local PostgreSQL + trigram)
 CNPJ_SERVICE_URL = os.environ.get('CNPJ_SERVICE_URL', '') or 'http://localhost:8003'
 
-# In-memory cache for CNPJ lookups with TTL + max size (LRU)
-from collections import OrderedDict
-from time import monotonic
-
-CACHE_TTL = 3600  # 1 hour
-CACHE_MAX = 1000  # max entries
-
-
-class TTLCache:
-    """Simple TTL + LRU cache for CNPJ lookups."""
-    def __init__(self, maxsize: int = CACHE_TTL, ttl: int = CACHE_TTL):
-        self._store: OrderedDict[str, tuple[dict, float]] = OrderedDict()
-        self._maxsize = maxsize
-        self._ttl = ttl
-
-    def get(self, key: str) -> Optional[dict]:
-        if key in self._store:
-            val, ts = self._store[key]
-            if monotonic() - ts < self._ttl:
-                self._store.move_to_end(key)
-                return val
-            else:
-                del self._store[key]  # expired
-        return None
-
-    def set(self, key: str, val: dict):
-        if len(self._store) >= self._maxsize:
-            self._store.popitem(last=False)  # evict oldest
-        self._store[key] = (val, monotonic())
-
-
-_cnpj_cache = TTLCache(maxsize=CACHE_MAX, ttl=CACHE_TTL)
-
+# In-memory cache for CNPJ lookups (avoids re-querying same business)
+_cnpj_cache: dict[str, dict] = {}
 
 
 def _try_cnpj_service(website: str, business_name: str, city: str, phone: str) -> Optional[dict]:
@@ -305,7 +319,7 @@ def _proxy_to_cnpj_service(endpoint: str, params: dict = None) -> Optional[dict]
     return None
 
 
-@app.get("/api/cnpj/busca-endereco")
+@app.get("/api/cnpj/busca-endereco", tags=["CNPJ"])
 async def busca_endereco(
     cep: str = "",
     logradouro: str = "",
@@ -330,9 +344,9 @@ async def busca_endereco(
     return {"total": 0, "filtros": {}, "results": [], "error": "CNPJ microservice não configurado. Funciona apenas em modo local (Docker)."}
 
 
-@app.get("/api/cnpj/busca-socio")
+@app.get("/api/cnpj/busca-socio", tags=["CNPJ"])
 async def busca_socio(
-    nome: str = "",
+    nome: str = Query("", min_length=3, description="Nome do socio (min. 3 caracteres)"),
     uf: str = "",
     municipio: str = "",
     limit: int = 20
@@ -348,7 +362,7 @@ async def busca_socio(
     return {"total": 0, "results": [], "error": "CNPJ microservice não configurado. Funciona apenas em modo local (Docker)."}
 
 
-@app.get("/api/cnpj/busca-avancada")
+@app.get("/api/cnpj/busca-avancada", tags=["CNPJ"])
 async def busca_avancada(
     uf: str = "",
     municipio: str = "",
@@ -384,39 +398,46 @@ async def busca_avancada(
     return {"total": 0, "filtros": {}, "results": [], "error": "CNPJ microservice não configurado. Funciona apenas em modo local (Docker)."}
 
 
-@app.get("/api/cnpj/cnae/categorias")
+@app.get("/api/cnpj/cnae/categorias", tags=["CNPJ"])
 async def listar_categorias_cnae():
-    """Lista categorias CNAE disponíveis (static, works everywhere)."""
+    """Lista as 34 categorias CNAE predefinidas (funciona sem microservice)."""
     return {"categorias": CNAE_CATEGORIAS}
 
 
-@app.post("/api/whatsapp/send")
+@app.post("/api/whatsapp/send", tags=["WhatsApp"])
 async def whatsapp_send(data: dict):
-    """WhatsApp send endpoint (placeholder — integrate with Evolution/Z-API)."""
+    """Envia mensagem WhatsApp. ATUALMENTE: placeholder (nao envia de verdade).
+
+    TODO: Integrar com Evolution API, Z-API, ou WhatsApp Business API.
+    """
     phone = data.get("phone", "")
     message = data.get("message", "")
     if not phone or not message:
         return {"error": "phone and message required"}
-    # TODO: integrate with WhatsApp API (Evolution, Z-API, or Business API)
     logger.warning(f"[WHATSAPP] Would send to {phone}: {message[:50]}...")
-    return {"status": "sent", "phone": phone, "message": message[:100]}
+    return {"status": "placeholder", "phone": phone, "message_preview": message[:100], "note": "Endpoint placeholder - integracao WhatsApp pendente"}
 
 
-@app.post("/api/enrich")
+@app.post("/api/enrich", tags=["Enrichment"])
 async def enrich_lead(data: dict):
-    import logging
-    import concurrent.futures
+    """Enriquece um lead com dados do CNPJ, responsavel, socios, etc.
+
+    Prioridade: CNPJ microservice (local DB) -> lookup_cnpj (multi-source) -> fallback Google.
+    Resultado fica em cache por 1 hora (max 500 entradas).
+    """
     log = logging.getLogger("enrich")
     from scraper_engine import _fallback_google_search, _normalize_phone
     website, business_name, city, phone = data.get("website", ""), data.get("name", ""), data.get("city", ""), data.get("phone", "")
     log.warning(f"[ENRICH] Called: website={website} name={business_name} city={city} phone={phone}")
 
-    # Cache check: use phone digits as key (most reliable identifier)
+    # Cache check
     phone_digits = re.sub(r'\D', '', phone) if phone else ""
     cache_key = phone_digits or business_name.lower().strip()
-    if cache_key and _cnpj_cache.get(cache_key):
-        log.warning(f"[ENRICH] Cache HIT for '{cache_key}'")
-        return _cnpj_cache.get(cache_key)
+    if cache_key:
+        cached = _cnpj_cache.get(cache_key)
+        if cached:
+            log.warning(f"[ENRICH] Cache HIT for '{cache_key}'")
+            return cached
 
     # Priority 1: Try CNPJ microservice (local DB, instant)
     if CNPJ_SERVICE_URL:
@@ -509,30 +530,35 @@ async def enrich_lead(data: dict):
         log.error(f"[ENRICH] Fallback error: {type(e).__name__}: {e}")
     return {"responsavel": "", "socios": "", "cnpj": "", "razao_social": "", "nome_fantasia": "", "situacao_cadastral": "", "natureza_juridica": "", "porte": "", "capital_social": "", "atividade_principal": "", "cnae_fiscal": "", "cnaes_secundarios": [], "opcao_simples": None, "opcao_mei": None, "regime_tributario": [], "situacao_especial": "", "data_inicio_atividade": "", "identificador_matriz_filial": "", "cep": "", "uf": "", "municipio": "", "bairro": "", "endereco_completo": "", "telefone_1": "", "telefone_2": "", "fax": "", "email": "", "qsa": [], "entidade_federativa": "", "codigo_municipio_ibge": "", "data_opcao_simples": "", "data_situacao_cadastral": "", "motivo_situacao": ""}
 
-@app.post("/api/social-search")
+@app.post("/api/social-search", tags=["Enrichment"])
 async def social_search(data: dict):
+    """Busca redes sociais (LinkedIn, Instagram, Facebook, Twitter/X) para um responsavel/negocio."""
     name, company, city = data.get("name", ""), data.get("company", ""), data.get("city", "")
     business_name, website = data.get("business_name", ""), data.get("website", "")
     if not name and not business_name and not website: return {"error": "Nome, negocio ou site obrigatorio"}
     return search_social_media(name=name, company=company, city=city, business_name=business_name, website=website)
 
-@app.post("/api/health-plan-check")
+@app.post("/api/health-plan-check", tags=["Enrichment"])
 def health_plan_check(data: dict):
+    """Verifica se uma empresa provavelmente tem plano de saude corporativo."""
     return check_health_plan(cnpj=data.get("cnpj", ""), name=data.get("name", ""), porte=data.get("porte", ""), qtd_funcionarios=data.get("qtd_funcionarios", ""), capital_social=data.get("capital_social", ""), cnae=data.get("cnae", ""))
 
-@app.post("/api/employee-count")
+@app.post("/api/employee-count", tags=["Enrichment"])
 def employee_count(data: dict):
+    """Estima quantidade de colaboradores via Wikipedia, Bing, LinkedIn, ou CNAE+porte."""
     return check_employee_count(name=data.get("name", ""), cnpj=data.get("cnpj", ""), porte=data.get("porte", ""), capital_social=data.get("capital_social", ""), cnae=data.get("cnae", ""))
 
-@app.get("/api/scrape/{job_id}")
+@app.get("/api/scrape/{job_id}", tags=["Scraper"])
 async def get_scrape_status(job_id: str):
+    """Retorna status e progresso de um job de scraping."""
     with jobs_lock:
         job = jobs.get(job_id)
         if not job: return {"error": "Job nao encontrado"}
         return {"status": job["status"], "progress": job["progress"], "total_results": len(job["results"]), "messages": job["messages"]}
 
-@app.delete("/api/scrape/{job_id}")
+@app.delete("/api/scrape/{job_id}", tags=["Scraper"])
 async def cancel_scrape(job_id: str):
+    """Cancela um job de scraping em andamento."""
     with jobs_lock:
         job = jobs.get(job_id)
         if not job: return {"error": "Job nao encontrado"}
@@ -542,19 +568,16 @@ async def cancel_scrape(job_id: str):
 DIST_DIR = os.path.join(os.path.dirname(__file__), "..", "dist")
 if os.path.isdir(DIST_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(DIST_DIR, "assets")), name="assets")
-
-    # Paths that should NOT be handled by SPA (let FastAPI handle them)
-    SPA_EXCLUDE = {"/docs", "/redoc", "/openapi.json", "/favicon.ico"}
-
-    @app.get("/{full_path:path}")
+    # SPA catch-all - exclude API docs and static files
+    @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        # Skip SPA for API docs and openapi
-        if f"/{full_path}" in SPA_EXCLUDE:
-            from fastapi.responses import Response
-            return Response(status_code=404)
+        """Serve React SPA. Excludes /docs, /redoc, /openapi.json, /api/."""
+        # Don't serve SPA for API docs or API routes
+        if full_path.startswith(("docs", "redoc", "openapi.json", "api/")):
+            return HTMLResponse(content="Not Found", status_code=404)
+        
         file_path = os.path.join(DIST_DIR, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
+        if os.path.isfile(file_path): return FileResponse(file_path)
         html_path = os.path.join(DIST_DIR, "index.html")
         with open(html_path, "r") as f:
             html = f.read()
