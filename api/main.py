@@ -319,6 +319,62 @@ def _proxy_to_cnpj_service(endpoint: str, params: dict = None) -> Optional[dict]
     return None
 
 
+@app.get("/api/cnpj/lookup", tags=["CNPJ"])
+async def cnpj_lookup(
+    cnpj: str = Query(..., description="CNPJ para consultar (com ou sem pontuacao)"),
+):
+    """Consulta dados de uma empresa pelo CNPJ.
+
+    Retorna todos os dados disponiveis: razao social, nome fantasia, situacao cadastral,
+    porte, capital social, CNAE, QSA (socios), endereco, telefone, email, etc.
+
+    Fonte: API Minha Receita (gratuita).
+    """
+    import re as _re
+    from scraper_engine import _lookup_cnpj_api, _is_valid_cnpj
+
+    # Clean CNPJ - remove formatting
+    cnpj_digits = _re.sub(r'\D', '', cnpj)
+
+    if len(cnpj_digits) != 14:
+        return {"error": "CNPJ deve ter 14 digitos", "received": cnpj}
+
+    if not _is_valid_cnpj(cnpj_digits):
+        return {"error": "CNPJ invalido (digitos verificadores incorretos)", "cnpj": cnpj_digits}
+
+    # Try CNPJ microservice first (local DB)
+    if CNPJ_SERVICE_URL:
+        try:
+            import httpx
+            formatted = f"{cnpj_digits[:2]}.{cnpj_digits[2:5]}.{cnpj_digits[5:8]}/{cnpj_digits[8:12]}-{cnpj_digits[12:14]}"
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(f"{CNPJ_SERVICE_URL}/api/cnpj/busca-endereco", params={"cep": "", "limit": 1})
+                # If microservice is up, try direct lookup
+                if resp.status_code == 200:
+                    resp2 = client.get(f"{CNPJ_SERVICE_URL}/api/cnpj/enrich", params={"cnpj": cnpj_digits})
+                    if resp2.status_code == 200:
+                        data = resp2.json()
+                        if data.get("cnpj"):
+                            return data
+        except Exception:
+            pass
+
+    # Fallback: Minha Receita API
+    try:
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _lookup_cnpj_api, cnpj_digits),
+            timeout=15.0,
+        )
+        if result:
+            return result
+        return {"error": "CNPJ nao encontrado", "cnpj": cnpj_digits}
+    except asyncio.TimeoutError:
+        return {"error": "Timeout ao consultar CNPJ", "cnpj": cnpj_digits}
+    except Exception as e:
+        return {"error": f"Erro ao consultar: {str(e)}", "cnpj": cnpj_digits}
+
+
 @app.get("/api/cnpj/busca-endereco", tags=["CNPJ"])
 async def busca_endereco(
     cep: str = "",
