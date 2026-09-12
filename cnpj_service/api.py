@@ -1272,12 +1272,12 @@ async def busca_avancada(
 
             # Order by
             order_map = {
-                'score': f"score DESC",
+                'score': f"prospect_score DESC",
                 'capital': f"emp.capital_social DESC NULLS LAST",
                 'cidade': f"e.municipio ASC",
                 'cnae': f"e.cnae_fiscal ASC",
             }
-            order_clause = order_map.get(order_by, 'score DESC')
+            order_clause = order_map.get(order_by, 'prospect_score DESC')
 
             query = f"""
                 SELECT
