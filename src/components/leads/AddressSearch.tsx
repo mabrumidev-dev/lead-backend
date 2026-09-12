@@ -251,22 +251,39 @@ export default function AddressSearch({ onAddToBase, showToast, baseLeadIds }: P
       params.set('limit', String(limit))
 
       const endpoint = searchMode === 'endereco' ? '/api/cnpj/busca-endereco' : '/api/cnpj/busca-avancada'
-      const resp = await fetch(`${API_BASE}${endpoint}?${params}`)
+      const url = `${API_BASE}${endpoint}?${params}`
+      console.log('[BUSCA] Requesting:', url)
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 20000)
+
+      const resp = await fetch(url, { signal: controller.signal })
+      clearTimeout(timeoutId)
+
+      console.log('[BUSCA] Response status:', resp.status)
+
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}))
         throw new Error(errData.detail || `Erro ${resp.status}`)
       }
 
       const data: SearchResult = await resp.json()
-      setResults(data.results)
-      setTotal(data.total)
-      if (data.total === 0) {
+      console.log('[BUSCA] Data received:', { total: data.total, resultsCount: data.results?.length })
+
+      setResults(data.results || [])
+      setTotal(data.total || 0)
+      if (!data.total || data.total === 0) {
         showToast('Nenhuma empresa encontrada com esses filtros', 'info')
       } else {
         showToast(`${data.total} empresa(s) encontrada(s)`, 'success')
       }
     } catch (err: any) {
-      setError(err.message || 'Erro na busca')
+      console.error('[BUSCA] Error:', err)
+      if (err.name === 'AbortError') {
+        setError('Tempo esgotado. Verifique se o backend está rodando na porta 8002.')
+      } else {
+        setError(err.message || 'Erro na busca')
+      }
       setResults([])
       setTotal(0)
     } finally {

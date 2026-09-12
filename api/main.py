@@ -184,7 +184,7 @@ async def analyze_vision(file: UploadFile = File(...)):
         raise Exception(f"Erro ao parsear JSON da IA: {str(e)} | Resposta bruta: {res_json}")
 
 # CNPJ microservice URL (local PostgreSQL + trigram)
-CNPJ_SERVICE_URL = os.environ.get('CNPJ_SERVICE_URL', '')
+CNPJ_SERVICE_URL = os.environ.get('CNPJ_SERVICE_URL', '') or 'http://localhost:8003'
 
 # In-memory cache for CNPJ lookups (avoids re-querying same business)
 _cnpj_cache: dict[str, dict] = {}
@@ -258,7 +258,7 @@ def _proxy_to_cnpj_service(endpoint: str, params: dict = None) -> Optional[dict]
         return None
     try:
         import httpx
-        with httpx.Client(timeout=15.0) as client:
+        with httpx.Client(timeout=httpx.Timeout(connect=3.0, read=10.0, write=5.0, pool=5.0)) as client:
             resp = client.get(f"{CNPJ_SERVICE_URL}{endpoint}", params=params)
             if resp.status_code == 200:
                 return resp.json()
