@@ -319,21 +319,74 @@ def _proxy_to_cnpj_service(endpoint: str, params: dict = None) -> Optional[dict]
     return None
 
 
+# ── Lookup tables for QSA codes ──
+QUALIFICACAO_SOCIO = {
+    '00': 'Não informada', '05': 'Administrador', '08': 'Conselheiro de Administração',
+    '09': 'Curador', '10': 'Diretor', '11': 'Interventor', '12': 'Inventariante',
+    '13': 'Liquidante', '14': 'Mãe', '15': 'Pai', '16': 'Presidente',
+    '17': 'Procurador', '18': 'Secretário', '19': 'Sociedade Consorciada',
+    '20': 'Sociedade Filiada', '21': 'Sócio', '22': 'Sócio Capitalista',
+    '23': 'Sócio Comanditado', '24': 'Sócio Comanditário', '25': 'Sócio de Indústria',
+    '26': 'Sócio-Gerente', '27': 'Sócio Majoritário', '28': 'Sócio Minoritário',
+    '29': 'Sócio Participante', '30': 'Sócio Solidário', '31': 'Titular Pessoa Física',
+    '32': 'Tutor', '33': 'Diretor-Presidente', '34': 'Fundador',
+    '37': 'Sócio Pessoa Jurídica Domiciliado no Exterior',
+    '38': 'Sócio Pessoa Física Residente ou Domiciliado no Exterior',
+    '39': 'Sócio-Administrador', '40': 'Empresário', '41': 'Candidato a Cargo Político Eletivo',
+    '42': 'Titular Pessoa Jurídica Domiciliada no Exterior',
+    '43': 'Responsável', '44': 'Sócio Imigrant',
+    '46': 'Órgão Gestor de Mão de Obra', '47': 'Ente Federativo',
+    '48': 'Órgão Gestor de Mão de Obra (OGMO)', '49': 'Sócio Administrador',
+    '50': 'Sócio com Capital', '51': 'Sócio sem Capital',
+    '54': 'Sócio Pessoa Física', '55': 'Sócio Pessoa Jurídica',
+    '56': 'Sócio-Estagiário', '57': 'Microempreendedor Individual (MEI)',
+    '58': 'Sócio com Capital Social', '59': 'Sócio sem Capital Social',
+    '60': 'Sócio Cotista', '61': 'Sócio Quotista',
+    '62': 'Sócio de Capital', '63': 'Sócio de Indústria',
+    '64': 'Sócio-Gerente Administrador', '65': 'Sócio-Gerente Gestor',
+    '66': 'Sócio-Gerente Presidente', '67': 'Sócio-Gerente Vice-Presidente',
+    '68': 'Sócio-Gerente Diretor', '69': 'Sócio-Gerente Conselheiro',
+    '70': 'Sócio-Gerente Superintendente', '71': 'Sócio-Gerente Gerente',
+    '72': 'Sócio-Gerente Supervisor', '73': 'Sócio-Gerente Coordenador',
+    '74': 'Sócio-Gerente Assessor', '75': 'Sócio-Gerente Técnico',
+    '76': 'Sócio-Gerente Consultor', '77': 'Sócio-Gerente Analista',
+    '78': 'Sócio-Gerente Engenheiro', '79': 'Sócio-Gerente Advogado',
+    '80': 'Sócio-Gerente Contador', '81': 'Sócio-Gerente Médico',
+    '82': 'Sócio-Gerente Dentista', '83': 'Sócio-Gerente Veterinário',
+    '84': 'Sócio-Gerente Farmacêutico', '85': 'Sócio-Gerente Professor',
+    '86': 'Sócio-Gerente Arquiteto', '87': 'Sócio-Gerente Economista',
+    '88': 'Sócio-Gerente Psicólogo', '89': 'Sócio-Gerente Jornalista',
+    '90': 'Sócio-Gerente Publicitário', '91': 'Sócio-Gerente Relações Públicas',
+    '92': 'Sócio-Gerente Sociólogo', '93': 'Sócio-Gerente Economista Doméstico',
+    '94': 'Sócio-Gerente Bibliotecário', '95': 'Sócio-Gerente Tradutor',
+    '96': 'Sócio-Gerente Intérprete', '97': 'Sócio-Gerente Outros',
+}
+
+FAIXA_ETARIA = {
+    '0': 'Não informada', '1': '0 a 12 anos', '2': '13 a 20 anos',
+    '3': '21 a 30 anos', '4': '31 a 40 anos', '5': '41 a 50 anos',
+    '6': '51 a 60 anos', '7': '61 a 70 anos', '8': '71 a 80 anos',
+    '9': 'Mais de 80 anos',
+}
+
+
 @app.get("/api/cnpj/lookup", tags=["CNPJ"])
 async def cnpj_lookup(
     cnpj: str = Query(..., description="CNPJ para consultar (com ou sem pontuacao)"),
 ):
-    """Consulta dados de uma empresa pelo CNPJ.
+    """Consulta completa de dados de uma empresa pelo CNPJ.
 
-    Retorna todos os dados disponiveis: razao social, nome fantasia, situacao cadastral,
-    porte, capital social, CNAE, QSA (socios), endereco, telefone, email, etc.
+    Busca em MULTIPLAS FONTES e mescla os dados:
+    1. Microservice local (Receita Federal bulk) — CPF mascarado, QSA, dados cadastrais
+    2. API Minha Receita — CNAEs secundarios, regime tributario, qualificacoes legiveis
 
-    Fonte: API Minha Receita (gratuita).
+    Retorna TODOS os dados disponiveis: razao social, nome fantasia, situacao cadastral,
+    porte, capital social, CNAE principal + secundarios, QSA (socios com CPF mascarado),
+    endereco completo, telefones, email, regime tributario, Simples/MEI, etc.
     """
     import re as _re
     from scraper_engine import _lookup_cnpj_api, _is_valid_cnpj
 
-    # Clean CNPJ - remove formatting
     cnpj_digits = _re.sub(r'\D', '', cnpj)
 
     if len(cnpj_digits) != 14:
@@ -342,37 +395,79 @@ async def cnpj_lookup(
     if not _is_valid_cnpj(cnpj_digits):
         return {"error": "CNPJ invalido (digitos verificadores incorretos)", "cnpj": cnpj_digits}
 
-    # Try CNPJ microservice first (local DB)
+    local_data = None
+    external_data = None
+
+    # ── Source 1: Microservice local (Receita Federal bulk) ──
     if CNPJ_SERVICE_URL:
         try:
             import httpx
-            formatted = f"{cnpj_digits[:2]}.{cnpj_digits[2:5]}.{cnpj_digits[5:8]}/{cnpj_digits[8:12]}-{cnpj_digits[12:14]}"
-            with httpx.Client(timeout=5.0) as client:
-                resp = client.get(f"{CNPJ_SERVICE_URL}/api/cnpj/busca-endereco", params={"cep": "", "limit": 1})
-                # If microservice is up, try direct lookup
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.get(f"{CNPJ_SERVICE_URL}/api/cnpj/{cnpj_digits}")
                 if resp.status_code == 200:
-                    resp2 = client.get(f"{CNPJ_SERVICE_URL}/api/cnpj/enrich", params={"cnpj": cnpj_digits})
-                    if resp2.status_code == 200:
-                        data = resp2.json()
-                        if data.get("cnpj"):
-                            return data
-        except Exception:
-            pass
+                    local_data = resp.json()
+        except Exception as e:
+            logger.warning(f"[CNPJ LOOKUP] Microservice error: {e}")
 
-    # Fallback: Minha Receita API
+    # ── Source 2: Minha Receita API (external) ──
     try:
         loop = asyncio.get_event_loop()
-        result = await asyncio.wait_for(
+        external_data = await asyncio.wait_for(
             loop.run_in_executor(None, _lookup_cnpj_api, cnpj_digits),
             timeout=15.0,
         )
-        if result:
-            return result
-        return {"error": "CNPJ nao encontrado", "cnpj": cnpj_digits}
-    except asyncio.TimeoutError:
-        return {"error": "Timeout ao consultar CNPJ", "cnpj": cnpj_digits}
     except Exception as e:
-        return {"error": f"Erro ao consultar: {str(e)}", "cnpj": cnpj_digits}
+        logger.warning(f"[CNPJ LOOKUP] Minha Receita error: {e}")
+
+    # ── Merge: local takes priority, external fills gaps ──
+    if local_data and external_data:
+        merged = {**external_data, **local_data}  # local overrides external
+        # QSA: prefer local (has CPF masked), but add readable qualificacao from external
+        local_qsa = local_data.get('qsa', [])
+        external_qsa = external_data.get('qsa', [])
+        if local_qsa:
+            enhanced_qsa = []
+            for ls in local_qsa:
+                entry = dict(ls)
+                # Add readable qualificacao
+                code = str(entry.get('qualificacao', '') or '').strip()
+                entry['qualificacao_desc'] = QUALIFICACAO_SOCIO.get(code, code)
+                # Add readable faixa etaria
+                fe_code = str(entry.get('faixa_etaria', '') or '').strip()
+                entry['faixa_etaria_desc'] = FAIXA_ETARIA.get(fe_code, fe_code)
+                # Try to find matching external entry for additional info
+                for es in external_qsa:
+                    if es.get('nome', '').upper() == entry.get('nome', '').upper():
+                        entry['qualificacao_desc'] = es.get('qualificacao', entry['qualificacao_desc'])
+                        entry['faixa_etaria_desc'] = es.get('faixa_etaria', entry['faixa_etaria_desc'])
+                        entry['entrada'] = es.get('entrada', entry.get('entrada', ''))
+                        break
+                enhanced_qsa.append(entry)
+            merged['qsa'] = enhanced_qsa
+        # CNAEs secundarios: prefer external (usually more complete)
+        if not merged.get('cnaes_secundarios') and external_data.get('cnaes_secundarios'):
+            merged['cnaes_secundarios'] = external_data['cnaes_secundarios']
+        # Regime tributario: prefer external
+        if not merged.get('regime_tributario') and external_data.get('regime_tributario'):
+            merged['regime_tributario'] = external_data['regime_tributario']
+        # Responsavel/socios string: prefer local
+        if not merged.get('responsavel') and external_data.get('responsavel'):
+            merged['responsavel'] = external_data['responsavel']
+        return merged
+
+    if local_data:
+        # Enhance QSA with readable codes
+        for s in local_data.get('qsa', []):
+            code = str(s.get('qualificacao', '') or '').strip()
+            s['qualificacao_desc'] = QUALIFICACAO_SOCIO.get(code, code)
+            fe_code = str(s.get('faixa_etaria', '') or '').strip()
+            s['faixa_etaria_desc'] = FAIXA_ETARIA.get(fe_code, fe_code)
+        return local_data
+
+    if external_data:
+        return external_data
+
+    return {"error": "CNPJ nao encontrado", "cnpj": cnpj_digits}
 
 
 @app.get("/api/cnpj/busca-endereco", tags=["CNPJ"])
