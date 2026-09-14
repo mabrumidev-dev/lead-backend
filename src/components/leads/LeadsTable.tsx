@@ -368,7 +368,7 @@ function LeadDetailModal({ lead, onClose }: { lead: any; onClose: () => void }) 
     }
     if (enriched.QSA && enriched.QSA.length > 0) {
       txt += `\n👥 QUADRO SOCIETÁRIO (${enriched.QSA.length})\n${line}\n`
-      for (const s of enriched.QSA) txt += `  • ${s.nome || s.Nome} — ${s.qualificacao || ''}\n`
+      for (const s of enriched.QSA) txt += `  • ${s.nome || s.Nome} — CPF: ${s.cnpj_cpf || '-'} — ${s.qualificacao || ''}\n`
     }
     if (enriched.RegimeTributario && enriched.RegimeTributario.length > 0) {
       txt += `\n💰 REGIME TRIBUTÁRIO\n${line}\n`
@@ -401,7 +401,7 @@ function LeadDetailModal({ lead, onClose }: { lead: any; onClose: () => void }) 
   }
 
   const downloadPDF = () => {
-    const qsaRows = (enriched.QSA || []).map((q: any) => `<tr><td>${q.nome || q.Nome || ''}</td><td>${q.qualificacao || ''}</td><td>${q.entrada || ''}</td><td>${q.faixa_etaria || ''}</td></tr>`).join('')
+    const qsaRows = (enriched.QSA || []).map((q: any) => `<tr><td>${q.nome || q.Nome || ''}</td><td>${q.cnpj_cpf || '-'}</td><td>${q.qualificacao || ''}</td><td>${q.entrada || ''}</td><td>${q.faixa_etaria || ''}</td></tr>`).join('')
     const socialRows = socialEntries.map(([p, d]: any) => `<tr><td>${p}</td><td><a href="${d.url}">${d.url}</a></td></tr>`).join('')
     const regimeRows = (enriched.RegimeTributario || []).map((r: string) => `<li>${r}</li>`).join('')
     const cnaeRows = (enriched.CnaesSecundarios || []).map((c: string) => `<li>${c}</li>`).join('')
@@ -480,7 +480,7 @@ function LeadDetailModal({ lead, onClose }: { lead: any; onClose: () => void }) 
 </div>
 </div>
 
-${enriched.QSA && enriched.QSA.length > 0 ? `<div class="section"><h2>👥 Quadro Societário (${enriched.QSA.length})</h2><table><tr><th>Nome</th><th>Qualificação</th><th>Entrada</th><th>Faixa Etária</th></tr>${qsaRows}</table></div>` : ''}
+${enriched.QSA && enriched.QSA.length > 0 ? `<div class="section"><h2>👥 Quadro Societário (${enriched.QSA.length})</h2><table><tr><th>Nome</th><th>CPF</th><th>Qualificação</th><th>Entrada</th><th>Faixa Etária</th></tr>${qsaRows}</table></div>` : ''}
 ${enriched.CnaesSecundarios && enriched.CnaesSecundarios.length > 0 ? `<div class="section"><h2>🏭 CNAEs Secundários</h2><ul>${cnaeRows}</ul></div>` : ''}
 ${enriched.RegimeTributario && enriched.RegimeTributario.length > 0 ? `<div class="section"><h2>💰 Regime Tributário</h2><ul>${regimeRows}</ul></div>` : ''}
 ${enriched.HealthPlan ? `<div class="section"><h2>🏥 Plano de Saúde</h2><p><strong>${enriched.HealthPlan.tem_plano === true ? 'Identificado' : enriched.HealthPlan.tem_plano === null ? 'Inconclusivo' : 'Não Identificado'}</strong> — Tipo: ${enriched.HealthPlan.tipo || '-'} | Confiança: ${enriched.HealthPlan.confianca || '-'}</p></div>` : ''}
@@ -601,6 +601,7 @@ ${socialEntries.length > 0 ? `<div class="section"><h2>🔗 Redes Sociais</h2><t
                         <thead>
                           <tr className="border-b border-slate-700">
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Nome</th>
+                            <th className="text-left px-3 py-2 text-slate-500 font-medium">CPF</th>
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Qualificação</th>
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Entrada</th>
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Faixa Etária</th>
@@ -610,6 +611,7 @@ ${socialEntries.length > 0 ? `<div class="section"><h2>🔗 Redes Sociais</h2><t
                           {enriched.QSA.map((s: any, i: number) => (
                             <tr key={i} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20">
                               <td className="px-3 py-2 text-slate-200 font-medium">{s.nome || s.Nome || ''}</td>
+                              <td className="px-3 py-2 text-slate-300 font-mono">{s.cnpj_cpf || '-'}</td>
                               <td className="px-3 py-2 text-slate-300">{s.qualificacao || ''}</td>
                               <td className="px-3 py-2 text-slate-300">{s.entrada || ''}</td>
                               <td className="px-3 py-2 text-slate-300">{s.faixa_etaria || ''}</td>

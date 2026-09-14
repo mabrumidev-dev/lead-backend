@@ -119,7 +119,7 @@ export default function LeadDetailPopup({ lead, onClose }: Props) {
       if (lead.QSA && lead.QSA.length > 0) {
         txt += `\n👥 QUADRO SOCIETÁRIO (${lead.QSA.length})\n${line}\n`
         for (const q of lead.QSA) {
-          txt += `  • ${q.nome}\n    ${q.qualificacao} | Desde ${q.entrada} | ${q.faixa_etaria}\n`
+          txt += `  • ${q.nome}\n    CPF: ${q.cnpj_cpf || '-'} | ${q.qualificacao} | Desde ${q.entrada} | ${q.faixa_etaria}\n`
           if (q.representante_legal) txt += `    Rep. Legal: ${q.representante_legal} (${q.rep_qualificacao})\n`
         }
       }
@@ -153,6 +153,7 @@ export default function LeadDetailPopup({ lead, onClose }: Props) {
     const qsaRows = (lead.QSA || []).map(q => `
       <tr>
         <td>${q.nome}</td>
+        <td>${q.cnpj_cpf || '-'}</td>
         <td>${q.qualificacao}</td>
         <td>${q.entrada}</td>
         <td>${q.faixa_etaria}</td>
@@ -235,7 +236,7 @@ export default function LeadDetailPopup({ lead, onClose }: Props) {
 </div>
 </div>
 
-${(lead.QSA || []).length > 0 ? `<div class="section"><h2>👥 Quadro Societário (${lead.QSA!.length})</h2><table><tr><th>Nome</th><th>Qualificação</th><th>Entrada</th><th>Faixa Etária</th><th>Rep. Legal</th></tr>${qsaRows}</table></div>` : ''}
+${(lead.QSA || []).length > 0 ? `<div class="section"><h2>👥 Quadro Societário (${lead.QSA!.length})</h2><table><tr><th>Nome</th><th>CPF</th><th>Qualificação</th><th>Entrada</th><th>Faixa Etária</th><th>Rep. Legal</th></tr>${qsaRows}</table></div>` : ''}
 
 ${(lead.CnaesSecundarios || []).length > 0 ? `<div class="section"><h2>🏭 CNAEs Secundários</h2><ul>${cnaeRows}</ul></div>` : ''}
 
@@ -365,6 +366,7 @@ ${socialEntries.length > 0 ? `<div class="section"><h2>🔗 Redes Sociais</h2><t
                         <thead>
                           <tr className="border-b border-slate-700">
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Nome</th>
+                            <th className="text-left px-3 py-2 text-slate-500 font-medium">CPF</th>
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Qualificação</th>
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Entrada</th>
                             <th className="text-left px-3 py-2 text-slate-500 font-medium">Faixa Etária</th>
@@ -375,6 +377,7 @@ ${socialEntries.length > 0 ? `<div class="section"><h2>🔗 Redes Sociais</h2><t
                           {lead.QSA.map((q, i) => (
                             <tr key={i} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-700/20">
                               <td className="px-3 py-2 text-slate-200 font-medium">{q.nome}</td>
+                              <td className="px-3 py-2 text-slate-300 font-mono">{q.cnpj_cpf || '-'}</td>
                               <td className="px-3 py-2 text-slate-300">{q.qualificacao}</td>
                               <td className="px-3 py-2 text-slate-300">{q.entrada}</td>
                               <td className="px-3 py-2 text-slate-300">{q.faixa_etaria}</td>

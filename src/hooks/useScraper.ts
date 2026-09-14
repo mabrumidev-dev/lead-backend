@@ -4,6 +4,7 @@ const API_BASE = import.meta.env.VITE_API_URL || ''
 
 export interface QSAItem {
   nome: string
+  cnpj_cpf?: string
   qualificacao: string
   entrada: string
   faixa_etaria: string
