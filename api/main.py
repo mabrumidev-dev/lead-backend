@@ -441,6 +441,9 @@ async def cnpj_lookup(
                         entry['qualificacao_desc'] = es.get('qualificacao', entry['qualificacao_desc'])
                         entry['faixa_etaria_desc'] = es.get('faixa_etaria', entry['faixa_etaria_desc'])
                         entry['entrada'] = es.get('entrada', entry.get('entrada', ''))
+                        # CPF mascarado: prefer local, fallback external
+                        if not entry.get('cnpj_cpf') and es.get('cnpj_cpf'):
+                            entry['cnpj_cpf'] = es['cnpj_cpf']
                         break
                 enhanced_qsa.append(entry)
             merged['qsa'] = enhanced_qsa
@@ -465,6 +468,13 @@ async def cnpj_lookup(
         return local_data
 
     if external_data:
+        # Enhance QSA even without local microservice
+        for s in external_data.get('qsa', []):
+            # External already has readable qualificacao/faixa_etaria — add _desc aliases
+            if not s.get('qualificacao_desc'):
+                s['qualificacao_desc'] = s.get('qualificacao', '')
+            if not s.get('faixa_etaria_desc'):
+                s['faixa_etaria_desc'] = s.get('faixa_etaria', '')
         return external_data
 
     return {"error": "CNPJ nao encontrado", "cnpj": cnpj_digits}

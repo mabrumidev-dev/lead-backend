@@ -124,6 +124,7 @@ def _lookup_cnpj_api(cnpj: str) -> Optional[dict]:
         admins = [
             {
                 "nome": p.get("nome_socio", ""),
+                "cnpj_cpf": p.get("cnpj_cpf_do_socio", ""),
                 "qualificacao": p.get("qualificacao_socio", ""),
                 "entrada": p.get("data_entrada_sociedade", ""),
                 "faixa_etaria": p.get("faixa_etaria", ""),
