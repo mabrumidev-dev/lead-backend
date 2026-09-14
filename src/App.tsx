@@ -1,7 +1,6 @@
 import { useState, useEffect, Component, type ReactNode } from 'react'
 import { Search, Users, Send, LogOut, Shield, Target, Database, Heart, Stethoscope, Plus, Activity, ShieldCheck, Building2, FileText, Upload, Map, Menu, Trash2, Globe, MapPin, BarChart3, TrendingUp } from 'lucide-react'
 import { useLeads } from './hooks/useLeads'
-import { useBaseLeads } from './hooks/useBaseLeads'
 import { LeadsFilters } from './components/leads/LeadsFilters'
 import { LeadsTable } from './components/leads/LeadsTable'
 import { LeadsBaseTable } from './components/leads/LeadsBaseTable'
@@ -143,8 +142,11 @@ function App() {
   const [activeFiltersState, setActiveFiltersState] = useState<FilterOptions>(INITIAL_FILTERS)
   const [toasts, setToasts] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { leads, loading, error, refetch, deleteLead, deleteMultipleLeads } = useLeads(activeFiltersState)
-  const { baseLeads, trashedLeads, addLeadToBase, removeLeadFromBase, trashLead, restoreLead, permanentDelete, updateLeadStatus, reprocessLead, batchReprocessLead } = useBaseLeads(userId)
+  const {
+    leads, loading, error, refetch, deleteLead, deleteMultipleLeads,
+    baseLeads, trashedLeads, fetchBaseLeads, addLeadToBase, trashLead,
+    restoreBaseLead, permanentDelete, updateLeadStatus, reprocessLead, batchReprocessLead,
+  } = useLeads(activeFiltersState)
 
   const showToast = (message: string, type: any = 'info') => {
     const id = Date.now();
@@ -184,10 +186,15 @@ function App() {
     else { setIsLogged(true); setUserId(data.user.id); }
   };
 
-  const handleAddToBase = (lead: any) => { addLeadToBase(lead); showToast(`${lead.name} adicionado!`, 'success'); };
-  const handleTrashLead = (id: string) => { trashLead(id); showToast('Movido para lixeira', 'info'); };
-  const handleRestoreLead = (id: string) => { restoreLead(id); showToast('Lead restaurado!', 'success'); };
-  const handlePermanentDelete = (id: string) => { permanentDelete(id); showToast('Excluído permanentemente', 'info'); };
+  // Fetch base leads when userId is available
+  useEffect(() => {
+    if (userId) fetchBaseLeads(userId)
+  }, [userId, fetchBaseLeads])
+
+  const handleAddToBase = (lead: any) => { addLeadToBase(lead, userId); showToast(`${lead.name} adicionado!`, 'success'); };
+  const handleTrashLead = (id: string) => { trashLead(id, userId); showToast('Movido para lixeira', 'info'); };
+  const handleRestoreLead = (id: string) => { restoreBaseLead(id, userId); showToast('Lead restaurado!', 'success'); };
+  const handlePermanentDelete = (id: string) => { permanentDelete(id, userId); showToast('Excluído permanentemente', 'info'); };
   const handleReprocessLead = async (id: string): Promise<boolean> => {
     showToast('Re-processando lead... (CNPJ + redes sociais + plano de saúde)', 'info')
     const result = await reprocessLead(id)
@@ -222,7 +229,7 @@ function App() {
         score: 70,
         source: 'IA Vision',
         created_at: new Date().toISOString()
-      });
+      }, userId);
       showToast("Lead extraído pela IA!", "success");
     }
   };
@@ -255,14 +262,14 @@ function App() {
         </div>
       );
     }
-    if (activeTab === 'base') return <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s)} onTrashLead={handleTrashLead} onReprocessLead={handleReprocessLead} onBatchReprocess={handleBatchReprocess} />;
+    if (activeTab === 'base') return <LeadsBaseTable leads={baseLeads as any} onStatusChange={(id, s) => updateLeadStatus(id, s, userId)} onTrashLead={handleTrashLead} onReprocessLead={handleReprocessLead} onBatchReprocess={handleBatchReprocess} />;
     if (activeTab === 'lixeira') return <TrashView trashedLeads={trashedLeads} onRestore={handleRestoreLead} onPermanentDelete={handlePermanentDelete} />;
     if (activeTab === 'pipeline') {
-      return <PipelineKanban leads={baseLeads} onStatusChange={(id, s) => updateLeadStatus(id, s)} onTrashLead={handleTrashLead} showToast={showToast} />
+      return <PipelineKanban leads={baseLeads} onStatusChange={(id, s) => updateLeadStatus(id, s, userId)} onTrashLead={handleTrashLead} showToast={showToast} />
     }
-    if (activeTab === 'disparo') return <LeadsDispatchWhatsApp leads={baseLeads as any} onClose={() => setActiveTab('base')} onStatusChange={(id, s) => updateLeadStatus(id, s)} onRemoveFromBase={handleTrashLead} />;
+    if (activeTab === 'disparo') return <LeadsDispatchWhatsApp leads={baseLeads as any} onClose={() => setActiveTab('base')} onStatusChange={(id, s) => updateLeadStatus(id, s, userId)} onRemoveFromBase={handleTrashLead} />;
     if (activeTab === 'importar') return <ImportLeads onImportComplete={(_l) => { showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} onBack={() => setActiveTab('buscar')} />;
-    if (activeTab === 'scraper') return <GoogleMapsScraper onImportComplete={async (importedLeads) => { for (const l of importedLeads) { await addLeadToBase(l); } showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} showToast={showToast} />;
+    if (activeTab === 'scraper') return <GoogleMapsScraper onImportComplete={async (importedLeads) => { for (const l of importedLeads) { await addLeadToBase(l, userId); } showToast('Importado!', 'success'); refetch(); setActiveTab('buscar'); }} showToast={showToast} />;
     return null;
   }
 

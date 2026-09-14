@@ -8,8 +8,10 @@ import re
 import logging
 import time
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -61,6 +63,96 @@ app.add_middleware(
 # ── In-memory job store ──
 jobs: dict[str, dict] = {}
 jobs_lock = threading.Lock()
+
+# ── Rate Limiter (per IP, thread-safe) ──
+class RateLimiter:
+    """Simple in-memory rate limiter with sliding window."""
+    def __init__(self, max_requests: int = 30, window_seconds: int = 60):
+        self._max = max_requests
+        self._window = window_seconds
+        self._requests: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.time()
+        with self._lock:
+            if key not in self._requests:
+                self._requests[key] = []
+            # Remove old requests outside window
+            self._requests[key] = [t for t in self._requests[key] if now - t < self._window]
+            if len(self._requests[key]) >= self._max:
+                return False
+            self._requests[key].append(now)
+            return True
+
+    def get_remaining(self, key: str) -> int:
+        now = time.time()
+        with self._lock:
+            if key not in self._requests:
+                return self._max
+            self._requests[key] = [t for t in self._requests[key] if now - t < self._window]
+            return max(0, self._max - len(self._requests[key]))
+
+_enrich_limiter = RateLimiter(max_requests=30, window_seconds=60)   # 30 req/min for enrichment
+_cnpj_limiter = RateLimiter(max_requests=60, window_seconds=60)    # 60 req/min for CNPJ lookups
+
+RATE_LIMITED_PATHS = {
+    '/api/enrich': _enrich_limiter,
+    '/api/social-search': _enrich_limiter,
+    '/api/health-plan-check': _enrich_limiter,
+    '/api/employee-count': _enrich_limiter,
+    '/api/cnpj/lookup': _cnpj_limiter,
+    '/api/cnpj/busca-endereco': _cnpj_limiter,
+    '/api/cnpj/busca-socio': _cnpj_limiter,
+    '/api/cnpj/busca-avancada': _cnpj_limiter,
+}
+
+@app.middleware('http')
+async def rate_limit_middleware(request: Request, call_next):
+    """Apply rate limiting to enrichment and CNPJ endpoints."""
+    path = request.url.path
+    for prefix, limiter in RATE_LIMITED_PATHS.items():
+        if path.startswith(prefix):
+            client_ip = request.client.host if request.client else 'unknown'
+            if not limiter.is_allowed(client_ip):
+                remaining = limiter.get_remaining(client_ip)
+                return JSONResponse(
+                    status_code=429,
+                    content={'error': 'Rate limit exceeded', 'retry_after': limiter._window},
+                    headers={
+                        'Retry-After': str(limiter._window),
+                        'X-RateLimit-Limit': str(limiter._max),
+                        'X-RateLimit-Remaining': str(remaining),
+                    }
+                )
+            break
+    response = await call_next(request)
+    return response
+
+# ── Global Exception Handlers (consistent error JSON) ──
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all: return consistent JSON error instead of HTML stack trace."""
+    logger.error(f"[UNHANDLED] {request.method} {request.url.path}: {type(exc).__name__}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            'error': 'Internal server error',
+            'detail': str(exc)[:500] if os.environ.get('DEBUG') else 'An unexpected error occurred',
+            'type': type(exc).__name__,
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc):
+    """Pydantic validation errors -> 422 with field details."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            'error': 'Validation error',
+            'detail': exc.errors(),
+        }
+    )
 
 # ── TTL Cache for CNPJ lookups (thread-safe, LRU eviction) ──
 class TTLCache:

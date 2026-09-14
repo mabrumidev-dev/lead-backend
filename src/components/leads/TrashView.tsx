@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Trash2, RotateCcw, XCircle, Users, Phone, AlertTriangle } from 'lucide-react'
-import { LeadInBase } from '@/hooks/useBaseLeads'
+import { LeadInBase } from '@/hooks/useLeads'
 
 interface TrashViewProps {
   trashedLeads: LeadInBase[]

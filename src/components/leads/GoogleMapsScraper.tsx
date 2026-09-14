@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, Play, XCircle, Loader2, MapPin, Phone, Globe, Star, Download, RotateCcw, Eye, User, Building2, ChevronDown, ArrowDownUp, Share2, Zap, Activity, X } from 'lucide-react'
 import { useScraper, ScrapedLead } from '@/hooks/useScraper'
-import LeadDetailPopup from '@/components/leads/LeadDetailPopup'
+import LeadDetailModal from '@/components/leads/LeadDetailModal'
 import { supabase } from '@/hooks/useLeads'
 import { Lead } from '@/types/lead'
 
@@ -571,7 +571,7 @@ export function GoogleMapsScraper({ onImportComplete, showToast }: Props) {
         </div>
       )}
 
-      <LeadDetailPopup lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} />
+      <LeadDetailModal lead={selectedLeadDetail} onClose={() => setSelectedLeadDetail(null)} />
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { Lead, PIPELINE_STAGES, getStageInfo } from '@/types/lead'
+import LeadDetailModal from '@/components/leads/LeadDetailModal'
 import { GripVertical, Phone, Mail, Building2, Star, MapPin, Eye, Trash2, ArrowRight, TrendingUp, Users, XCircle, Plus } from 'lucide-react'
 
 interface Props {
@@ -305,90 +306,6 @@ function KanbanCard({ lead, compact, onDragStart, onDragEnd, onView, onQuickMove
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Lead Detail Modal ──
-function LeadDetailModal({ lead, onClose, onQuickMove, onTrash }: {
-  lead: Lead; onClose: () => void; onQuickMove: (lead: Lead, stage: Lead['status']) => void; onTrash: () => void
-}) {
-  const enriched = lead.enriched_data
-  const stage = getStageInfo(lead.status)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-8 pb-4 sm:pb-8 bg-black/60 backdrop-blur-sm overflow-y-auto" onClick={onClose}>
-      <div className="relative w-full max-w-2xl mx-2 sm:mx-4 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors z-10">
-          <XCircle size={18} />
-        </button>
-        <div className="p-5">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 flex items-center justify-center text-lg font-bold text-cyan-400 shrink-0">
-              {(enriched?.NomeFantasia || lead.name)[0]?.toUpperCase()}
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-cyan-400">{enriched?.NomeFantasia || lead.name}</h2>
-              {enriched?.RazaoSocial && <p className="text-xs text-slate-500">{enriched.RazaoSocial}</p>}
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stage.bgColor} ${stage.color} border ${stage.borderColor}`}>
-                  {stage.icon} {stage.label}
-                </span>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${scoreColor(lead.score)}`}>
-                  ⭐ {lead.score}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Pipeline move */}
-          <div className="mb-4">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Mover para:</p>
-            <div className="flex flex-wrap gap-1.5">
-              {PIPELINE_STAGES.filter(s => s.key !== lead.status).map(s => (
-                <button key={s.key} onClick={() => { onQuickMove(lead, s.key); onClose() }}
-                  className={`text-xs px-3 py-1.5 rounded-lg border ${s.borderColor} ${s.bgColor} ${s.color} hover:scale-105 transition-transform`}>
-                  {s.icon} {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-slate-700 my-4" />
-
-          {/* Info grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-            <Field emoji="📞" label="Telefone" value={lead.phone} />
-            <Field emoji="✉️" label="Email" value={enriched?.Email || lead.email} />
-            <Field emoji="📍" label="Cidade" value={`${lead.city || ''}${enriched?.UF ? `/${enriched.UF}` : ''}`} />
-            {enriched?.CNPJ && <Field emoji="🏢" label="CNPJ" value={fmtCNPJ(enriched.CNPJ)} />}
-            {enriched?.Porte && <Field emoji="📊" label="Porte" value={enriched.Porte} />}
-            {enriched?.AtividadePrincipal && <Field emoji="⚙️" label="Atividade" value={enriched.AtividadePrincipal} />}
-            {enriched?.CapitalSocial && <Field emoji="💰" label="Capital" value={`R$ ${Number(enriched.CapitalSocial).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />}
-            {enriched?.SituacaoCadastral && <Field emoji="✅" label="Situação" value={enriched.SituacaoCadastral} />}
-          </div>
-
-          <div className="border-t border-slate-700 mt-4 pt-4 flex gap-2">
-            <button onClick={onTrash} className="btn-ghost text-sm flex items-center gap-1.5 text-rose-400 hover:text-rose-300">
-              <Trash2 size={14} /> Lixeira
-            </button>
-            <button onClick={onClose} className="btn-ghost text-sm ml-auto">Fechar</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Field({ emoji, label, value }: { emoji: string; label: string; value: any }) {
-  if (!value || value === '' || value === null || value === undefined) return null
-  return (
-    <div className="flex items-start gap-2 py-1">
-      <span className="text-sm mt-0.5 shrink-0">{emoji}</span>
-      <div className="min-w-0">
-        <p className="text-[11px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">{label}</p>
-        <p className="text-sm text-slate-200 break-words">{value}</p>
-      </div>
     </div>
   )
 }
